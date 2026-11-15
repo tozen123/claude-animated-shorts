@@ -80,6 +80,9 @@ User rules that apply:
 7. **Post** (`Bridge.tsx` + `ink.ts` + `lensblur.ts` + `grade.ts`).
    - Composer order: ink → lens pre → lens main → bloom → NEUTRAL tone map → grade (MSAA 4).
    - Every pixel parameter scales with output height / 1920.
+   - Reference look: `new InkPass(scene, camera, SAMPLE_INK)` and the bloom from `SAMPLE_BLOOM` (`templates/fx/glow.ts`),
+     plus glossy materials, lamps, light shafts and `SunGlare` in world.ts; reactions and particles in cast.ts (see the
+     **3D look** and **Particles** sections below). The dog short (`studio/src/videos/dog/`) is the worked example.
    - Subtitles: copy `templates/captions/Captions.tsx` next to the composition and mount `<Captions words={WORDS} />`
      as the LAST layer (above the flash). Needs `npm install @remotion/google-fonts@<remotion version>` in `studio/`.
      Input prop `{ captions: false }` hides them for look-check stills.
@@ -183,6 +186,47 @@ ever moves. Use `templates/motion/bounce.ts` (pure functions of time since the e
   amplitude scales with the story beat (a crash > a wave). Reactions still land 0-3 frames before their word.
 - **Check:** render 8 consecutive stills every 3-4 frames around each bouncy beat and confirm the arc, the landing
   squash and the settle. Background objects must be identical frame to frame.
+
+## 3D look, highlights and glows (measured from `audio-sample/`; overrides the older ink target above)
+Copy `templates/fx/glow.ts` next to world.ts. The reference reads as soft, glossy, lit 3D with cartoon characters on top:
+- **Outlines:** the world carries only thin, soft lines (`SAMPLE_INK`: ~2.6 px near → 1.4 px far, 70 % opacity, fading
+  out by ~260 m); characters keep their thick plum ink. Pass `SAMPLE_INK` to `new InkPass(scene, camera, SAMPLE_INK)`.
+- **Gloss:** painted metal, car paint, varnished wood, brass and chrome get sharp specular glints where the sun hits
+  (`glossy(color, shininess, spec)`, `chrome()`, `brass()`; they stay two-tone and shadow-masked). Matte stays Lambert.
+- **Glows:** everything that emits light is HDR (`emissive(color, 3-5)`) so it blooms: lamp bulbs + `halo` sprites
+  (`lamp()`), lit windows, headlights, light bars, sparks, glowing eyes. Bloom uses `SAMPLE_BLOOM` (intensity 0.85,
+  threshold 1.0, 7 levels, radius 0.72): surfaces never bloom, light sources always do. Keep halos small (0.6-1.0 m)
+  where they sit in front of a window or face.
+- **Light shafts:** a soft additive `lightShaft()` from every interior window to the floor (strength ~0.1; stronger
+  washes the window out). **Sun haze:** `SunGlare` placed every frame (day 34°, golden 26° and warmer); it shows when the
+  camera faces the sun, like the reference's bright sky corners. Night scenes: warm lit windows + lamp halos against
+  blue moonlight.
+- **Check:** in stills, highlights sit on curved/glossy things only, glows bloom without hiding faces, windows are not
+  white-washed, and world lines are clearly lighter than the characters' ink.
+
+## Particles, lightning and expression reactions (measured from `audio-sample/`)
+Copy `templates/fx/particles.ts` and `templates/fx/reactions.ts` next to toon.ts / bounce.ts. Effect cards with `glow`
+render additively in HDR (cast.ts `Fx.use(soft, glow, tint)`) and bloom; plain cards are ink-outlined cartoon shapes.
+- **Every expression change is an event.** Give each speaking character an expression timeline `[{t, expr}]` (0-3 frames
+  before the word) and stage them through `reaction()`: the face switches on the frame, the body answers (`punch`
+  squash; a hop for shock and joy) and the matching effect appears:
+  - `furious`: within 1 frame red angry eyes that **glow** (HDR, pulsing), the top of the face darkens, a short red flash,
+    the body jolts, then red jagged **anger bolts** crackle around him, re-drawn every 2-3 frames while the anger lasts
+    (the reference sheriff);
+  - `shock`: a hop plus three **shock lines** over the head; `nervous` / `pained`: a **sweat drop** sliding down;
+    `laugh` / `grin` / `relief`: a small hop plus **sparkles**; `dazed`: the stars card.
+  The effects ride the head through the hop (eyes stay on the face).
+- **Actions get particles.** Impacts: `impactDust` (dust ring + hopping chunks) on landings, falls, slams, drops.
+  Gunshots / metal / grinding: `sparks` (hot orange streaks fanned along the hit, falling under gravity, gone in
+  ~0.5 s) with a muzzle burst. Shiny rewards / a key object arriving: `sparkles`. Magic, fire, sunsets: `embers`.
+  Marching / running / driving on dirt: small looping dust puffs at the feet or wheels. Weather: `rain` streaks;
+  `lightningStrike` (2 bright frames + 3 afterglow, a white-blue branching bolt) also returns a `flash` value: lift the
+  sky/fog and the sun intensity by it for those frames.
+- **Feel:** particles live 0.3-1.4 s, are deterministic (pure functions of time + seed: any frame renders alone), and
+  sit on the main subject; never fill the frame, never cover a face or the subtitle line. Background scenery never
+  emits particles unless the story is about it (the storm, the fire).
+- **Check:** render strips of 3-6 frames across each reaction and action: the face changes on the frame, the squash
+  lands, the glow blooms and the particles arc, fade and disappear.
 
 ## Look-match loop (how the bridge look was reached; reuse for any "make it look like X" pass)
 1. **Measure the reference first.** One analysis agent per topic (motion, depth, textures, characters, lighting, outlines, grade), each writing numbers, not adjectives, to `references/reports/<topic>.md`. Shared brief: `compare/CONTEXT.md`. Reports are the source of truth for every agent after.

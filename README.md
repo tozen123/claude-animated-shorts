@@ -14,6 +14,9 @@ Proven on **The Bridge That Fell for a Song**, a 67 s short about the 1831 Broug
 | `templates/voice/make_voice.py` | Narration + word timings from ElevenLabs (`--voice "David"`, model `eleven_v3`); key goes in the root `.env` (see `.env.example`) |
 | `templates/captions/Captions.tsx` | Word-timed subtitles in the reference style (1-3 words, white Montserrat 800, black outline, 70 % height) |
 | `templates/motion/bounce.ts` | Springy motion for main subjects: pop-in, drop-in, hop with squash and stretch, punch, breathing, car springs |
+| `templates/fx/glow.ts` | Reference 3D look: glossy / chrome / brass materials, HDR emissives, lamp halos, god rays, sun haze, thin world ink, bloom preset |
+| `templates/fx/particles.ts` | Deterministic particles: sparks, embers, impact dust + debris, anger bolts, glowing eyes, rain, lightning, sparkles, sweat, shock lines |
+| `templates/fx/reactions.ts` | Expression-change reactions: face switch + body squash/hop + matching effect (glowing furious eyes, bolts, sweat, sparkles, shock lines) |
 | `projects/<name>/` | One folder per short: `SCRIPT.md`, `voice/`, `audio/` |
 | `studio/` | The Remotion project the shorts render in (`src/videos/<name>/`); `npm install` once |
 | `templates/audio/` | The synthesized sound: SFX, march music, the mix with ducking and loudness |

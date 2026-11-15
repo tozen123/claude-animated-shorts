@@ -86,17 +86,24 @@ export class Actor {
 }
 /** unlit effect card: hard cut-out (ink drawings), soft see-through (dust, mist) or a multiply ground blob */
 export class Fx {
-  mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; soft: THREE.MeshBasicMaterial; blob: THREE.MeshBasicMaterial; r: Req | null = null;
+  mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; soft: THREE.MeshBasicMaterial; blob: THREE.MeshBasicMaterial; glowM: THREE.MeshBasicMaterial; r: Req | null = null;
+  private glowing = false;
   constructor(parent: THREE.Object3D) {
     this.mat = new THREE.MeshBasicMaterial({ map: blank, alphaTest: 0.5, side: THREE.DoubleSide });
     this.mat.alphaToCoverage = false; // A2C + MSAA left 1 px sky-depth seams on blurred far cards (POST)
     this.soft = new THREE.MeshBasicMaterial({ map: blank, transparent: true, depthWrite: false, side: THREE.DoubleSide });
     this.blob = blobMaterial(blank);
+    // additive HDR glow: sparks, glowing eyes, embers, lightning (blooms past the 1.0 threshold)
+    this.glowM = new THREE.MeshBasicMaterial({ map: blank, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
     this.mesh = new THREE.Mesh(CARD, this.mat);
     this.mesh.visible = false; this.mesh.layers.set(NOINK);
     parent.add(this.mesh);
   }
-  use(soft: boolean) { this.mesh.material = soft ? this.soft : this.mat; }
+  use(soft: boolean, glow?: number, tint?: [number, number, number]) {
+    this.glowing = !!glow;
+    if (glow) { this.glowM.color.setRGB(...(tint ?? [1, 1, 1])).multiplyScalar(glow); this.mesh.material = this.glowM; this.mesh.renderOrder = 7; }
+    else this.mesh.material = soft ? this.soft : this.mat;
+  }
   bind() {
     const t = this.r?.tex;
     if (!t) return;
@@ -105,7 +112,7 @@ export class Fx {
       if (t.generateMipmaps) { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.needsUpdate = true; }
       this.blob.map = t; this.mesh.material = this.blob; this.mesh.renderOrder = 0.5;
     }
-    else { this.mat.map = t; this.soft.map = t; this.mesh.renderOrder = 0; }
+    else { this.mat.map = t; this.soft.map = t; this.glowM.map = t; if (!this.glowing) this.mesh.renderOrder = 0; }
   }
 }
 
@@ -114,7 +121,9 @@ export type Place = {
   key: string; draw: (p: Pen) => void; x: number; y: number; z: number;
   scale?: number; mirror?: boolean; yaw?: number; geo?: "body" | "swing"; roll?: number; size?: [number, number, number];
 };
-export type FxPlace = { key: string; cw: number; ch: number; draw: (p: Pen) => void; x: number; y: number; z: number; w: number; h: number; flat?: boolean; rot?: number; soft?: boolean };
+export type FxPlace = { key: string; cw: number; ch: number; draw: (p: Pen) => void; x: number; y: number; z: number; w: number; h: number; flat?: boolean; rot?: number; soft?: boolean;
+  /** additive HDR glow (particles.ts): gain > 1 blooms; tint = linear RGB of the light */
+  glow?: number; tint?: [number, number, number] };
 /** sun = world direction TOWARD the sun (optional: when absent the scene's shadow-casting light is used) */
 export type CamInfo = { pos: THREE.Vector3; right: THREE.Vector3; sun?: THREE.Vector3 };
 

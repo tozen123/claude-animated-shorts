@@ -15,6 +15,7 @@ import { EffectComposer } from "@react-three/postprocessing";
 import { BlendFunction, BloomEffect, ToneMappingEffect, ToneMappingMode } from "postprocessing";
 import { World } from "./world";
 import { InkPass, noInkFallback } from "./ink";
+import { SAMPLE_INK, SAMPLE_BLOOM } from "./glow";
 import { LensBlur, GrainEffect } from "./lensblur";
 import { GradeEffect, GRADES, GRADE_STRENGTH, gradeFor } from "./grade";
 import { TOTAL, FLASH_AT, SHOTS, layersAt, dofAt } from "./story";
@@ -31,7 +32,7 @@ const toggles = (): PostToggles => ({ ink: true, lens: true, pre: true, bloom: t
  *  whatever the output size, so the glow keeps the same size relative to the frame (e-fold ~30 px at 1080p,
  *  ~1.5 % of the frame height) at 540, 1080 and 1440 widths. ADD blend: HDR-safe (SCREEN darkens values > 1). */
 const makeBloom = () => {
-  const b = new BloomEffect({ blendFunction: BlendFunction.ADD, intensity: 0.5, luminanceThreshold: 1.0, luminanceSmoothing: 0.2, mipmapBlur: true, levels: 6, radius: 0.6 });
+  const b = new BloomEffect({ blendFunction: BlendFunction.ADD, mipmapBlur: true, ...SAMPLE_BLOOM }); // reference: soft, generous glows
   const mip = b.mipmapBlurPass;
   const setSize = mip.setSize.bind(mip);
   mip.setSize = (w: number, h: number) => setSize(Math.round((1920 * w) / Math.max(h, 1)), 1920);
@@ -48,7 +49,7 @@ const Inner: React.FC<{ id: number }> = ({ id }) => {
   const target = useMemo(() => new THREE.Vector3(), []);
   const on = useMemo(toggles, []);
   const fx = useMemo(() => ({
-    ink: new InkPass(scene, camera as THREE.PerspectiveCamera),
+    ink: new InkPass(scene, camera as THREE.PerspectiveCamera, SAMPLE_INK), // thin soft world lines; characters keep their ink
     lens: new LensBlur({ maxCoC: 24, nearScale: 1.2 }),
     bloom: makeBloom(),
     tone: new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL }),

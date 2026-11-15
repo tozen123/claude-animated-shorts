@@ -10,6 +10,7 @@ import { Pen, greekFlag, bulgarianFlag } from "./toon";
 import { LIGHTS, LOOK, LightPreset } from "./lights";
 import { TONE, CHAR, untone } from "./shade";
 import { NOINK } from "./ink";
+import { SunGlare, lightShaft, lamp, brass, glossy } from "./glow";
 import { Pool, Actor, Fx, stage } from "./cast";
 import { FPS, SHOTS, camAt, ShotDef, S, roadX, PETRICH_Z, GR_HUT, BG_HUT, GR_FLAG, BG_FLAG, ATHENS, SOFIA, PARIS, SCHOOL, V3 } from "./story";
 
@@ -59,6 +60,7 @@ export class World {
   private sunCache = new Map<number, THREE.Vector3>();
   private clouds: THREE.Mesh[] = []; private cloudMaps: Record<"day" | "golden", THREE.Texture[]>;
   private flags: Flag[] = [];
+  private glare!: SunGlare;
   private frustum = new THREE.Frustum(); private m4 = new THREE.Matrix4(); private v = new THREE.Vector3(); private sph = new THREE.Sphere();
 
   constructor() {
@@ -82,6 +84,7 @@ export class World {
     this.sun = new THREE.DirectionalLight("#fff0d6", 2.6);
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(4096, 4096);
     R.add(this.hemi, this.sun, this.sun.target);
+    this.glare = new SunGlare(R); // the reference's bright sun haze in the sky
     this.cloudMaps = { day: [0, 1, 2, 3].map((k) => cloudHD(k, LOOK.day.cloud)), golden: [0, 1, 2, 3].map((k) => cloudHD(k, LOOK.golden.cloud)) };
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + 0.2, d = 1300 + (i % 3) * 150;
@@ -131,6 +134,7 @@ export class World {
     const poleM = lam("flagPole", () => ({ color: "#e8e2d4" }));
     const flagMesh = (base: V3, kind: "gr" | "bg", ph: number, h = 6.2, size = 1.0) => {
       b.add(new THREE.CylinderGeometry(0.06, 0.08, h, 8).translate(base[0], h / 2, base[2]), poleM);
+      b.add(new THREE.SphereGeometry(0.13, 12, 8).translate(base[0], h + 0.08, base[2]), brass());
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1.8 * size, 1.2 * size, 14, 2), lam("flagCloth" + kind, () => ({ map: flagTexture(kind), side: THREE.DoubleSide })));
       m.castShadow = true; m.frustumCulled = false; m.userData.size = size;
       R.add(m); this.flags.push({ m, base: [base[0], h - 0.65 * size, base[2]], ph });
@@ -205,6 +209,7 @@ export class World {
     for (const s of [-1, 1]) b.add(boxGeo(V(x + s * W - (s > 0 ? 0 : 0.2), 0, z - D), V(x + s * W + (s > 0 ? 0.2 : 0), H, z + 1.5)), wp);
     const frame = lam("frame", () => ({ color: "#f6f1e4" })), glass = lam("glass", () => ({ color: "#a9cdea" }));
     const wx = x + (flag ? 2.2 : 0);
+    this.root.add(lightShaft(new THREE.Vector3(wx, 2.6, z - D + 0.1), new THREE.Vector3(wx - 0.9, 0.05, z - D + 2.6), 1.5, "#ffe2b0", 0.09));
     b.add(boxGeo(V(wx - 0.9, 1.0, z - D + 0.0), V(wx + 0.9, 2.7, z - D + 0.06)), glass);
     for (const [x0, x1, y0, y1] of [[wx - 1.0, wx + 1.0, 0.92, 1.02], [wx - 1.0, wx + 1.0, 2.68, 2.78], [wx - 1.0, wx - 0.9, 1.0, 2.7], [wx + 0.9, wx + 1.0, 1.0, 2.7], [wx - 0.04, wx + 0.04, 1.0, 2.7]])
       b.add(boxGeo(V(x0, y0, z - D), V(x1, y1, z - D + 0.1)), frame);
@@ -216,7 +221,7 @@ export class World {
   }
 
   private furnish(b: Batch) {
-    const wood = lam("deskWood", () => ({ color: "#7a4b2a" })), top = lam("deskTop", () => ({ color: "#8a5a34" })), leather = lam("leather", () => ({ color: "#5a2e2a" }));
+    const wood = lam("deskWood", () => ({ color: "#7a4b2a" })), top = glossy("#8a5a34", 40, 0.35), leather = glossy("#5a2e2a", 30, 0.25);
     const desk = (o: V3, w = 2.2) => {
       const [x, , z] = o;
       b.add(boxGeo(V(x - w / 2, 0.86, z - 0.5), V(x + w / 2, 0.94, z + 0.5)), top);
@@ -230,11 +235,17 @@ export class World {
     b.add(new THREE.CylinderGeometry(0.07, 0.08, 0.1, 10).translate(ATHENS[0] - 0.8, 0.99, ATHENS[2] - 0.6), lam("ink", () => ({ color: "#2b2a30" })));
     // Sofia: the telegraph table with a brass key and a sounder
     desk([SOFIA[0], 0, SOFIA[2] - 0.5], 1.8);
-    const brass = lam("brass", () => ({ color: "#c9a24e" }));
+    const brassM = brass();
     b.add(boxGeo(V(SOFIA[0] - 0.3, 0.94, SOFIA[2] - 0.2), V(SOFIA[0] + 0.3, 0.98, SOFIA[2] + 0.1)), wood);
-    b.add(boxGeo(V(SOFIA[0] - 0.22, 0.98, SOFIA[2] - 0.08), V(SOFIA[0] + 0.18, 1.01, SOFIA[2] - 0.02)), brass);
+    b.add(boxGeo(V(SOFIA[0] - 0.22, 0.98, SOFIA[2] - 0.08), V(SOFIA[0] + 0.18, 1.01, SOFIA[2] - 0.02)), brassM);
     b.add(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 10).translate(SOFIA[0] + 0.2, 1.03, SOFIA[2] - 0.05), lam("knob", () => ({ color: "#2b2a30" })));
-    b.add(boxGeo(V(SOFIA[0] + 0.45, 0.94, SOFIA[2] - 0.5), V(SOFIA[0] + 0.85, 1.25, SOFIA[2] - 0.2)), brass);
+    b.add(boxGeo(V(SOFIA[0] + 0.45, 0.94, SOFIA[2] - 0.5), V(SOFIA[0] + 0.85, 1.25, SOFIA[2] - 0.2)), brassM);
+    // warm lamps that bloom: desk lamps in Athens and Sofia, three hanging lamps over the council table
+    for (const [x, y, z, s] of [[ATHENS[0] - 1.05, 1.32, ATHENS[2] - 0.85, 0.9], [SOFIA[0] - 0.75, 1.32, SOFIA[2] - 0.75, 0.9],
+      [PARIS[0], 3.0, PARIS[2] - 1.6, 0.6], [PARIS[0], 3.0, PARIS[2] - 0.2, 0.6], [PARIS[0], 3.0, PARIS[2] + 1.2, 0.6]] as const) {
+      const l = lamp("#ffcf8a", 0.07, s); l.position.set(x, y, z); this.root.add(l);
+      if (y < 2) b.add(new THREE.ConeGeometry(0.16, 0.18, 14, 1, true).translate(x, y + 0.06, z), glossy("#2f5a3a", 60, 0.5));
+    }
     // Paris: the long council table under green baize, chairs on both sides
     const baize = lam("baize", () => ({ color: "#3f7a4a" }));
     b.add(boxGeo(V(PARIS[0] - 0.7, 0.8, PARIS[2] - 2.4), V(PARIS[0] + 0.7, 0.88, PARIS[2] + 2.0)), baize);
@@ -291,6 +302,7 @@ export class World {
     const [fc, fn, ff] = FOG[s.light];
     untone(fc, this.fog.color); this.fog.near = fn; this.fog.far = ff;
     scene.fog = this.fog; scene.background = null;
+    this.glare.place(cam, sunDir, 900, s.light === "golden" ? 26 : 34, s.light === "golden" ? 1.3 : 0.75, s.light === "golden" ? "#ffc58a" : "#fff4dc");
     this.sunDisc.visible = s.light === "golden";
     if (this.sunDisc.visible) { this.sunDisc.position.copy(cam.position).addScaledVector(sunDir, 2200); this.sunDisc.scale.setScalar(2 * 2200 * Math.tan(THREE.MathUtils.degToRad(1.7))); }
     for (let i = 0; i < this.clouds.length; i++) {
@@ -334,7 +346,7 @@ export class World {
       if (!this.frustum.intersectsSphere(this.sph.set(this.v.set(p.x, p.y, p.z), Math.max(p.w, p.h)))) continue;
       const e2 = this.fx(fi++);
       e2.r = this.pool.req(p.key, p.cw, p.ch, 1, p.draw);
-      e2.use(!!p.soft);
+      e2.use(!!p.soft, p.glow, p.tint);
       e2.mesh.visible = true;
       e2.mesh.position.set(p.x, p.y, p.z);
       if (p.flat) e2.mesh.rotation.set(-Math.PI / 2, 0, p.rot ?? 0);

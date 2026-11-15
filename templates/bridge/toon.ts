@@ -227,8 +227,8 @@ const DEF_LIGHT = rad(-120);
 
 // ---------------- faces ----------------
 export type Expr = "neutral" | "stern" | "grin" | "laugh" | "whistle" | "nervous" | "shock" | "relief" | "relief_open" | "dazed"
-  | "pained" | "smile" | "smile_closed" | "lick";
-type EyeK = "dot" | "small" | "lid" | "slit" | "happy" | "dash" | "squeeze" | "shock" | "shockHalf" | "spiral";
+  | "pained" | "smile" | "smile_closed" | "lick" | "furious";
+type EyeK = "dot" | "small" | "lid" | "slit" | "happy" | "dash" | "squeeze" | "shock" | "shockHalf" | "spiral" | "angry";
 type MouthK = "dash" | "frown" | "smirk" | "smile" | "smileWide" | "grin" | "laugh" | "o" | "O" | "wave" | "teeth" | "lick";
 /** eyes [back, front], brows [inner, outer] offsets in u (+ = down), mouth kind */
 const FACE: Record<Expr, { eye: [EyeK, EyeK]; brow: [number, number]; mouth: MouthK }> = {
@@ -246,6 +246,8 @@ const FACE: Record<Expr, { eye: [EyeK, EyeK]; brow: [number, number]; mouth: Mou
   smile: { eye: ["dot", "dot"], brow: [0, -1], mouth: "smirk" },
   smile_closed: { eye: ["happy", "happy"], brow: [0, -1], mouth: "smile" },
   lick: { eye: ["dot", "dot"], brow: [0, -1], mouth: "lick" },
+  // reference "furious": red angry eyes (they also get a bloom glow from reactions.ts), brows slammed down, teeth
+  furious: { eye: ["angry", "angry"], brow: [8, -5], mouth: "teeth" },
 };
 const halfLid = (k: EyeK): EyeK => (k === "dot" || k === "small" ? "lid" : k === "lid" ? "slit" : k === "shock" ? "shockHalf" : k);
 const eyeKind = (k: EyeK, lid: number): EyeK =>
@@ -261,6 +263,9 @@ const eye = (p: Pen, kind: EyeK, x: number, ey: number, u: number, side: number,
     case "slit": p.ell(lx, ey, 7 * u, 2.6 * u, INK, 0, 0, 180); p.stroke([[x - 9 * u, ey], [x + 9 * u, ey]], lw); break;
     case "happy": p.arc(x, ey + 3 * u, 8 * u, 6 * u, 200, 340, lw); break;
     case "dash": p.stroke([[x - 8.5 * u, ey], [x + 8.5 * u, ey]], lw); break;
+    case "angry": // a red slit eye under a hard lid line, white-hot core
+      p.ell(x, ey + u, 9 * u, 6.5 * u, "#ff3b2f", 2.4 * u, 0, 360, side * 12); p.ell(x, ey + 1.5 * u, 3.5 * u, 2.5 * u, "#ffe0d0", 0);
+      p.stroke([[x - 10 * u * side, ey - 6 * u], [x + 10 * u * side, ey - 1 * u]], lw); break;
     case "squeeze": p.stroke([[x + 6 * u * side, ey - 5 * u], [x - 6 * u * side, ey], [x + 6 * u * side, ey + 5 * u]], lw); break;
     case "shock": case "shockHalf":
       p.ell(x, ey, 11 * u, 11 * u, WHITE, 2.6 * u); p.dot(lx - side * 1.5 * u, ey + 1.5 * u, 3 * u);
@@ -597,6 +602,7 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
   hatBehind(p, o, H, 300, hc, light, thick, ow, false);
   const hp = blobPts(300, hc, H);
   p.shadedFill(hp, skin, mul(skin, SH_SKIN), light, H.a);
+  if (expr === "furious") p.clip(hp, () => { const g = p.g, [, ty] = p.P(300, hc - H.b), [, by] = p.P(300, hc + 0.15 * H.b); const gr = g.createLinearGradient(0, ty, 0, by); gr.addColorStop(0, "rgba(70,22,48,0.62)"); gr.addColorStop(1, "rgba(70,22,48,0)"); g.fillStyle = gr; g.fillRect(0, ty - 50, 2000, by - ty + 50); });
   p.inkRing(hp, ow, thick);
   hatOn(p, o, hp, H, 300, hc, light, seed, facing, false);
   const brim = !!o.hat && o.hat !== "hair" && o.hat !== "bonnet" && o.hat !== "cap";

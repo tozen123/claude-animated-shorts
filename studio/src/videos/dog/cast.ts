@@ -11,6 +11,8 @@ import {
 } from "./story";
 import { NOINK } from "./ink";
 import { popIn, dropIn, hop, punch, breathe, mix, Squash } from "./bounce";
+import { sparks, impactDust, sparkles, shockLines, embers } from "./particles";
+import { reaction, ExprKey } from "./reactions";
 import { cardShade, blobMaterial, CARD_K } from "./cardshade";
 // ---------------- canvas pool ----------------
 type Entry = { cv: HTMLCanvasElement; tex: THREE.CanvasTexture; w: number; h: number };
@@ -82,17 +84,24 @@ export class Actor {
 }
 /** unlit effect card: hard cut-out (ink drawings), soft see-through (dust, mist) or a multiply ground blob */
 export class Fx {
-  mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; soft: THREE.MeshBasicMaterial; blob: THREE.MeshBasicMaterial; r: Req | null = null;
+  mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; soft: THREE.MeshBasicMaterial; blob: THREE.MeshBasicMaterial; glowM: THREE.MeshBasicMaterial; r: Req | null = null;
+  private glowing = false;
   constructor(parent: THREE.Object3D) {
     this.mat = new THREE.MeshBasicMaterial({ map: blank, alphaTest: 0.5, side: THREE.DoubleSide });
     this.mat.alphaToCoverage = false; // A2C + MSAA left 1 px sky-depth seams on blurred far cards (POST)
     this.soft = new THREE.MeshBasicMaterial({ map: blank, transparent: true, depthWrite: false, side: THREE.DoubleSide });
     this.blob = blobMaterial(blank);
+    // additive HDR glow: sparks, glowing eyes, embers, lightning (blooms past the 1.0 threshold)
+    this.glowM = new THREE.MeshBasicMaterial({ map: blank, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
     this.mesh = new THREE.Mesh(CARD, this.mat);
     this.mesh.visible = false; this.mesh.layers.set(NOINK);
     parent.add(this.mesh);
   }
-  use(soft: boolean) { this.mesh.material = soft ? this.soft : this.mat; }
+  use(soft: boolean, glow?: number, tint?: [number, number, number]) {
+    this.glowing = !!glow;
+    if (glow) { this.glowM.color.setRGB(...(tint ?? [1, 1, 1])).multiplyScalar(glow); this.mesh.material = this.glowM; this.mesh.renderOrder = 7; }
+    else this.mesh.material = soft ? this.soft : this.mat;
+  }
   bind() {
     const t = this.r?.tex;
     if (!t) return;
@@ -101,7 +110,7 @@ export class Fx {
       if (t.generateMipmaps) { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.needsUpdate = true; }
       this.blob.map = t; this.mesh.material = this.blob; this.mesh.renderOrder = 0.5;
     }
-    else { this.mat.map = t; this.soft.map = t; this.mesh.renderOrder = 0; }
+    else { this.mat.map = t; this.soft.map = t; this.glowM.map = t; if (!this.glowing) this.mesh.renderOrder = 0; }
   }
 }
 
@@ -112,7 +121,9 @@ export type Place = {
   /** bounce (bounce.ts): squash scales about the feet + hop height */
   sx?: number; sy?: number; dy?: number;
 };
-export type FxPlace = { key: string; cw: number; ch: number; draw: (p: Pen) => void; x: number; y: number; z: number; w: number; h: number; flat?: boolean; rot?: number; soft?: boolean };
+export type FxPlace = { key: string; cw: number; ch: number; draw: (p: Pen) => void; x: number; y: number; z: number; w: number; h: number; flat?: boolean; rot?: number; soft?: boolean;
+  /** additive HDR glow (particles.ts): gain > 1 blooms; tint = linear RGB of the light */
+  glow?: number; tint?: [number, number, number] };
 /** sun = world direction TOWARD the sun (optional: when absent the scene's shadow-casting light is used) */
 export type CamInfo = { pos: THREE.Vector3; right: THREE.Vector3; sun?: THREE.Vector3 };
 
@@ -248,6 +259,13 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     out.places.push({ ...person(cam, who(i, o, okey), x, y, z, FRONT, { blink: lidAt(t, i), ...fo }, {}, sc), ...sqOf(s) });
     if (y === D0) blob(out, x, D0, z, sc * (1 - 0.6 * Math.min(1, s.y / 0.5)));
   };
+  /** a standing character whose face follows an expression timeline: the drawing, the reaction squash and the
+   *  reaction effects (glowing eyes, bolts, sweat, sparkles, shock lines) all come from reactions.ts */
+  const actor = (i: number, o: Outfit, okey: string, x: number, z: number, fo: FrontOpts, keys: ExprKey[], fallback: string, extra?: Squash, kid = false) => {
+    const r = reaction(t, keys, { x, z, kid, seed: i }, cam, fallback);
+    stand(i, o, okey, x, z, { ...fo, expr: r.expr as FrontOpts["expr"] }, extra ? mix(r.squash, extra) : r.squash);
+    out.fx.push(...(r.fx as FxPlace[]));
+  };
   /** a walking / marching / running figure: picks the front or side drawing from the camera, mirrors to its heading */
   const walker = (i: number, o: Outfit, okey: string, x: number, z: number, dx: number, dz: number, phase: number, fo: FrontOpts = {}, so: SideOpts = {}, sq?: Squash) => {
     const v = viewOf(cam, x, z, dx, dz), ph = q(phase, 24);
@@ -322,25 +340,29 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
         blob(out, 0.2, D0, z);
       }
       const g = hop(t - T.runs - 0.35, 0.3, 0.38);
-      stand(11, BULG(0), "bgG", BG_GUARD[0], BG_GUARD[2], { mode: "stand", expr: t < T.shoots ? "stern" : "shock" }, t < T.shoots + 0.1 ? g : punch(t - T.shoots, 0.12));
+      actor(11, BULG(0), "bgG", BG_GUARD[0], BG_GUARD[2], { mode: "stand" }, [{ t: T.shoots + 0.2, expr: "shock" }], "stern", t < T.shoots + 0.1 ? g : undefined);
       if (t > T.shoots - 0.04 && t < T.shoots + 0.8) {
         const u = q((t - T.shoots + 0.04) / 0.84, 30), muzzle: V3 = [BG_GUARD[0] - 0.55, 1.55, BG_GUARD[2] + 0.35];
         if (u < 0.3) card(`burst${u}`, 500, 500, (p) => fxBurst(p, u / 0.3, "#fff3b0", 8, 30, 160), muzzle, 0.7, 0.7);
         card(`puff${u}`, 300, 300, (p) => fxPuff(p, u), [muzzle[0] - 0.2 * u, muzzle[1] + 0.25 * u, muzzle[2]], 0.9 + 0.6 * u, 0.9 + 0.6 * u, { soft: true });
       }
+      out.fx.push(...(sparks(t - T.shoots, [BG_GUARD[0] - 0.55, 1.55, BG_GUARD[2] + 0.35], cam, 3, { n: 18, speed: 4.5, dir: [-0.8, 0.3, 0.5], spread: 0.5, size: 0.25 }) as FxPlace[]));
+      out.fx.push(...(impactDust(t - T.shoots - 0.3, [0.2, 0, z], 4, { n: 7, size: 0.9, chunks: 3, chunkCol: "#8a7a5a" }) as FxPlace[]));
       break;
     }
     case S.ATHENS: case S.BILL: case S.UNFAIR: {
       const pz = ATHENS[2] - 1.55;
-      const expr = id === S.ATHENS ? (t < T.furious + 0.1 ? "stern" : "stern") : id === S.BILL ? (t < T.bill ? "neutral" : "shock") : (t < T.greecePay ? "stern" : "pained");
-      const sq = id === S.ATHENS ? mix(punch(t - T.furious, 0.2), punch(t - T.hours, 0.08), punch(t - T.francs, 0.08))
-        : id === S.BILL ? punch(t - T.bill, 0.16) : mix(punch(t - T.italy, 0.08), punch(t - T.greecePay, 0.14));
-      stand(1, PANGALOS, "pangalos", ATHENS[0] + (id === S.UNFAIR ? 0.3 : 0), pz, { mode: "stand", expr, wave: id === S.UNFAIR && t > T.italy ? 0.6 : id === S.ATHENS && t > T.hours ? 0.3 + 0.2 * Math.sin(t * 6) : undefined, facing: id === S.UNFAIR ? -1 : 0 }, sq);
+      const keys: ExprKey[] = id === S.ATHENS ? [{ t: T.furious - 0.07, expr: "furious" }]
+        : id === S.BILL ? [{ t: T.bill - 0.07, expr: "shock" }] : [{ t: T.unfair, expr: "stern" }, { t: T.greecePay - 0.07, expr: "furious" }];
+      const sq = id === S.ATHENS ? mix(punch(t - T.hours, 0.08), punch(t - T.francs, 0.08)) : id === S.UNFAIR ? punch(t - T.italy, 0.08) : undefined;
+      const px = ATHENS[0] + (id === S.UNFAIR ? 0.3 : 0);
+      actor(1, PANGALOS, "pangalos", px, pz, { mode: "stand", wave: id === S.UNFAIR && t > T.italy ? 0.6 : id === S.ATHENS && t > T.hours ? 0.3 + 0.2 * Math.sin(t * 6) : undefined, facing: id === S.UNFAIR ? -1 : 0 }, keys, id === S.BILL ? "neutral" : "stern", sq);
+      if (id === S.ATHENS) out.fx.push(...(impactDust(t - T.furious - 0.08, [px, 0.95, pz + 0.75], 3, { n: 6, size: 0.45, chunks: 4, chunkCol: "#f6efd9" }) as FxPlace[])); // papers jump off the slammed desk
       if (id === S.ATHENS && t > T.hours - 0.1) {
         const k = popIn(t - T.hours + 0.1);
         card(`clock${q(t % 1, 12)}`, 500, 500, (p) => fxClock(p, t * 3), [ATHENS[0] + 0.85, 2.05, ATHENS[2] - 0.95], 0.75 * k, 0.75 * k);
       }
-      if (id === S.ATHENS && t > T.francs) { const k = dropIn(t - T.francs, 1.2); card("coinbag", 420, 440, (p) => fxCoinBag(p), [ATHENS[0] - 0.75, 1.17 + k.y, ATHENS[2] - 0.6], 0.42 * k.sx, 0.44 * k.sy); }
+      if (id === S.ATHENS && t > T.francs) { const k = dropIn(t - T.francs, 1.2); card("coinbag", 420, 440, (p) => fxCoinBag(p), [ATHENS[0] - 0.75, 1.17 + k.y, ATHENS[2] - 0.6], 0.42 * k.sx, 0.44 * k.sy); out.fx.push(...(sparkles(t, [ATHENS[0] - 0.75, 1.3, ATHENS[2] - 0.5], 5, { n: 4, radius: 0.25, size: 0.1 }) as FxPlace[])); }
       if (id === S.BILL && t > T.bill - 0.2) {
         const u = q(smooth((t - T.bill + 0.2) / 1.0), 30), k = popIn(t - T.bill + 0.2);
         card(`bill${u}`, 400, 1000, (p) => fxBill(p, u), [ATHENS[0] + 0.62, 1.42, ATHENS[2] - 0.75], 0.5 * k, 1.25 * k);
@@ -353,25 +375,32 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     }
     case S.SORRY: {
       const bow = smooth((t - T.sorry - 0.2) / 0.35) * (1 - 0.5 * smooth((t - T.misunderstanding - 0.3) / 0.4));
-      stand(20, BG_OFFICIAL, "bgOff", 0.6, -0.9, { mode: "stand", expr: "nervous", tilt: -16 * bow, facing: -1 }, punch(t - T.misunderstanding, 0.1));
+      actor(20, BG_OFFICIAL, "bgOff", 0.6, -0.9, { mode: "stand", tilt: -16 * bow, facing: -1 }, [{ t: T.sorry - 0.07, expr: "nervous" }], "neutral", punch(t - T.misunderstanding, 0.1));
       stand(10, GREEK(0), "grS", -1.1, 1.6, { mode: "stand", expr: "stern", facing: 1 });
       stand(13, GREEK(2), "grS2", -2.0, 2.4, { mode: "stand", expr: "stern", facing: 1 });
       break;
     }
-    case S.MARCH: column(columnFront(t), -1); defenders(false); break;
+    case S.MARCH: {
+      column(columnFront(t), -1); defenders(false);
+      const f0 = columnFront(t);
+      for (let k = 0; k < 6; k++) { const dz = -(f0 - 1.2 - k * 2.2); out.fx.push(...(impactDust(((t + k * 0.37) % 1.1), [roadX(dz) + (k % 2 ? 0.6 : -0.6), 0, dz], 20 + k, { n: 3, size: 0.7, chunks: 0, col: "214,190,150" }) as FxPlace[])); }
+      break;
+    }
     case S.FRONT: {
       column(-FRONT_LINE_Z - 0.0, -1, true);
       const p: V3 = [roadX(FRONT_LINE_Z) + 0.0, 0, FRONT_LINE_Z];
       if (t > T.lands - 0.2) {
         const k = dropIn(t - T.lands + 0.2, 2.6, 0.2);
         card("telegram", 500, 620, (pp) => fxTelegram(pp), [p[0] + 0.32, 1.32 + k.y, p[2] - 0.35], 0.34 * k.sx, 0.42 * k.sy, { rot: k.y > 0.02 ? 0.3 * Math.sin(t * 9) : 0.08 });
+        if (k.y < 0.02) out.fx.push(...(sparkles(t, [p[0] + 0.32, 1.4, p[2] - 0.4], 9, { n: 5, radius: 0.3, size: 0.12 }) as FxPlace[]));
       }
+      if (t > T.attack - 0.07 && t < T.attack + 0.6) { const d = t - T.attack + 0.07; card(`shock${q(d, 20)}`, 300, 220, (pp) => shockLines(pp, d), [p[0], 1.95, p[2] - 0.1], 0.6 * Math.min(1, d * 6), 0.44 * Math.min(1, d * 6)); }
       break;
     }
     case S.FROZEN: column(-FRONT_LINE_Z, -1, true); defenders(true); break;
     case S.SOFIA: {
       const tap = Math.max(0, Math.sin(t * Math.PI * 2 * 3.2)) > 0.7 && t < T.league + 0.6;
-      stand(20, BG_OFFICIAL, "bgOff", SOFIA[0], SOFIA[2] - 1.25, { mode: "stand", expr: t < T.referee ? "nervous" : "relief", tilt: tap ? 4 : 0 }, t > T.referee ? hop(t - T.referee - 0.1, 0.16, 0.3) : undefined);
+      actor(20, BG_OFFICIAL, "bgOff", SOFIA[0], SOFIA[2] - 1.25, { mode: "stand", tilt: tap ? 2.5 : 0 }, [{ t: T.calls, expr: "nervous" }, { t: T.referee - 0.07, expr: "relief" }], "nervous");
       if (t > T.referee - 0.1) {
         const k = popIn(t - T.referee + 0.1);
         card(`whistle${q(t % 1, 12)}`, 520, 400, (p) => fxWhistle(p, t), [SOFIA[0] + 0.55, 2.12, SOFIA[2] - 0.9], 0.8 * k, 0.62 * k);
@@ -385,11 +414,12 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
         out.places.push({ ...pl, ...sqOf(breathe(t, 400 + k, 0.01)) });
       }
       const bp: V3 = [PARIS[0], 0, PARIS[2] - 2.95];
-      stand(30, BRIAND, "briand", bp[0], bp[2], { mode: "stand", expr: t < T.stop ? "stern" : "grin", wave: t > T.telegram - 0.1 && t < T.lands ? 0.6 : undefined }, mix(punch(t - T.telegram, 0.1), punch(t - T.stop, 0.1), punch(t - T.goHome, 0.08)));
+      actor(30, BRIAND, "briand", bp[0], bp[2], { mode: "stand", wave: t > T.telegram - 0.1 && t < T.lands ? 0.6 : undefined }, [{ t: T.council, expr: "stern" }, { t: T.stop - 0.07, expr: "grin" }], "stern", mix(punch(t - T.telegram, 0.1), punch(t - T.goHome, 0.08)));
       if (t > T.telegram) {
         const u = clamp01((t - T.telegram) / 0.7), k = popIn(t - T.telegram);
         const pos = lerpV([bp[0] + 0.45, 1.7, bp[2] + 0.3], [PARIS[0] + 0.15, 1.6, PARIS[2] - 1.3], smooth(u));
         card("telegram", 500, 620, (p) => fxTelegram(p), pos, 0.36 * k, 0.45 * k, { rot: (1 - u) * 6.28 * 1.5 });
+        if (u < 1) out.fx.push(...(sparkles(t, pos, 7, { n: 4, radius: 0.25, size: 0.1 }) as FxPlace[]));
       }
       break;
     }
@@ -402,7 +432,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
         stand(500 + k, KIDS[k % 8], "kid" + k, x, z, { mode: "stand", expr: t > T.watching ? "shock" : k % 2 ? "nervous" : "shock" }, t > T.watching ? hop(t - T.watching - 0.05 * k, 0.12, 0.25) : undefined);
       }
       const swing = t < T.watching + 0.6;
-      stand(520, KIDS[2], "fighterA", C[0] - 0.55, C[2] + 0.1, { mode: "stand", expr: swing ? "stern" : "nervous", wave: swing ? 0.9 : undefined, facing: 1 }, swing ? punch(t - T.swinging, 0.12) : hop(t - T.watching - 0.6, 0.1, 0.24));
+      actor(520, KIDS[2], "fighterA", C[0] - 0.55, C[2] + 0.1, { mode: "stand", wave: swing ? 0.9 : undefined, facing: 1 }, [{ t: T.works, expr: "furious" }, { t: T.watching + 0.5, expr: "nervous" }], "stern", swing ? punch(t - T.swinging, 0.12) : undefined, true);
       stand(521, KIDS[5], "fighterB", C[0] + 0.6, C[2] + 0.2, { mode: "stand", expr: "nervous", facing: -1, tilt: swing ? 8 : 0 });
       const tx = C[0] - 3.2 + 3.15 * smooth((t - T.fight + 0.2) / 0.5);
       stand(530, TEACHER, "teacher", tx, C[2] - 0.7, { mode: "stand", expr: "stern" }, hop(t - T.fight + 0.2, 0.22, 0.34));
@@ -411,11 +441,14 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     case S.BACK: {
       column(homeFront(t), 1);
       stand(11, BULG(0), "bgG", 4.2, -0.6, { mode: "stand", expr: t < T.pounds + 0.4 ? "smile" : "grin", wave: 0.5 + 0.5 * Math.sin(t * 8) }, t > T.pounds + 0.4 ? hop((t - T.pounds - 0.4) % 0.9, 0.26, 0.36) : undefined);
-      if (t > T.pounds - 0.1) { const k = dropIn(t - T.pounds + 0.1, 3.0, 0.3); card("coinbag", 420, 440, (p) => fxCoinBag(p), [5.1, 0.42 + k.y, -1.2], 0.8 * k.sx, 0.84 * k.sy); }
+      if (t > T.pounds - 0.1) { const k = dropIn(t - T.pounds + 0.1, 3.0, 0.3); card("coinbag", 420, 440, (p) => fxCoinBag(p), [5.1, 0.42 + k.y, -1.2], 0.8 * k.sx, 0.84 * k.sy);
+        out.fx.push(...(impactDust(t - T.pounds - 0.43, [5.1, 0, -1.2], 6, { n: 8, size: 1.0, chunks: 0 }) as FxPlace[]));
+        if (k.y < 0.02) out.fx.push(...(sparkles(t, [5.1, 0.6, -1.2], 11, { n: 5, radius: 0.45, size: 0.15 }) as FxPlace[])); }
       break;
     }
     case S.DOG:
       dog(DOG_END[0], DOG_END[2], 1, 0, { mode: "sit", wag: wagOf(2.0), tongue: true }, t > T.nobodyWrote + 0.3 ? hop(t - T.nobodyWrote - 0.3, 0.15, 0.28) : undefined);
+      out.fx.push(...(embers(t, [DOG_END[0] - 0.6, 0.3, DOG_END[2] + 1.0], 13, { n: 10, radius: 1.6, rise: 1.6, size: 0.07, tint: [2.6, 1.7, 0.7] }) as FxPlace[]));
       break;
   }
   return out;

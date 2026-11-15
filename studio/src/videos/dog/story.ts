@@ -103,7 +103,7 @@ export const CAMS: Record<number, Key[]> = {
   // 3 the dog wanders across the line: low side view, the white stones in the foreground
   [S.CROSS]: [{ f: sf(S.CROSS), s: (f) => { const d = dogAt(f / FPS), u = f - sf(S.CROSS); return { pos: [5.8, 0.95, d.z + 0.4 - 0.006 * u], look: [0.6, 0.42, d.z - 0.25], fov: 38, roll: R(3) }; } }],
   // 4 he runs after it, the Bulgarian guard pops up and fires (over the guard's shoulder)
-  [S.SHOT]: [{ f: sf(S.SHOT), s: (f) => ({ ...creep([14, 2.0, -0.5], [0.9, 1.0, -0.6], 0.0016)(f - sf(S.SHOT)), fov: 42, roll: R(-3) }) }],
+  [S.SHOT]: [{ f: sf(S.SHOT), s: (f) => ({ ...creep([14, 2.0, -0.5], [1.4, 1.0, -1.4], 0.0016)(f - sf(S.SHOT)), fov: 48, roll: R(-3) }) }],
   // 5 Athens: Pangalos slams his desk; in on the 48-hour clock
   [S.ATHENS]: [
     { f: sf(S.ATHENS), s: (f) => ({ ...creep(off(ATHENS, [0.4, 1.65, 4.6]), off(ATHENS, [0, 1.55, -1.4]), 0.0022)(f - sf(S.ATHENS)), fov: 40, roll: R(2) }) },
