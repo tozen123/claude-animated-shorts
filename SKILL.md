@@ -16,12 +16,13 @@ The style reference is a channel studied privately (`references/`: STYLE_BIBLE.m
 - Never say the channel's name in a voice-over or description.
 
 User rules that apply:
-- No captions or labels in the video.
+- Word-timed subtitles in every video, in the reference style (see **Subtitles** below). No other text in the picture: signs, boards and labels in the 3D world use pictograms only.
+- Main subjects (characters, vehicles, story props, effect cards) move with bouncy, springy, smooth animation; background scenery never bounces (see **Bouncy motion** below).
 - English only.
 - Voice: one steady tone.
 - Jokes are researched real facts.
 - Standard mix: music +3 dB, SFX -6 dB, voice unchanged.
-- Final export 2K vertical: 1440x2560, `--scale 1.3333`.
+- Final export 2K vertical: 1440x2560, `--scale 1.3333333333333333` (exactly 4/3: Remotion 4 rejects `1.3333`, which gives a 2559.94 px height).
 - Opus max verifies every check.
 - Save after every step.
 - "Just do it" once the script is approved.
@@ -39,8 +40,21 @@ User rules that apply:
    - **Consequence:** the rule it created.
    - **Callback twist:** the ending.
    - Never describe on screen what the viewer already sees.
-3. **Voice.** Record or generate `voice.wav`, then make its word timings `words.json` (any speech-to-text with word times).
-   - Put them in the project folder, e.g. `~/bridge-short/voice/`.
+3. **Voice.** Make `voice.wav` and its word timings `words.json` with `templates/voice/make_voice.py` (ElevenLabs).
+   - `python templates/voice/make_voice.py <project> --voice "David" --takes 3`, listen, then `--use N`. It reads the
+     script table in `<project>/SCRIPT.md` and writes `<project>/voice/voice.wav` (48 kHz) + `words.json`
+     (`[{"w","s","e"}]`, from ElevenLabs character timestamps; faster-whisper fallback).
+   - Needs `ELEVENLABS_API_KEY` in the `.env` at the repo root (git-ignored; `.env.example` shows the format).
+     The user pastes the key; never type, print or commit it.
+   - Layout: each short is `projects/<name>/` (SCRIPT.md, voice/, audio/); the Remotion project is `studio/`
+     (`studio/src/videos/<name>/`, run `npm install` in `studio/` once).
+   - Target pace 3.4-3.8 words/s with almost no pauses; ~220-235 words for 60 s. Proven recipe (road short):
+     `--model eleven_multilingual_v2 --tight --speed 1.15 --style 0.45 --stability 0.35`, then `--tighten` (cuts
+     silent gaps to 0.24 s after sentences / 0.14 s after commas and shifts words.json). `eleven_v3` is the most
+     expressive and takes audio tags (`[excited]`, `[whispers]`), but it ignores `--speed` and reads ~2.4 words/s.
+   - Free ElevenLabs plans can use only premade voices through the API (Voice Library voices return HTTP 402):
+     generate library voices on elevenlabs.io and bring the file in with `--from-file <audio>`.
+   - A recorded voice works too: drop in `voice.wav` and make `words.json` with any speech-to-text with word times.
    - Hand-fix the word timings. Everything is timed to words.json.
 4. **Shot plan** in `story.ts`: copy `templates/bridge/` (the final bridge source, same as `src/videos/bridge/` of your Remotion project) to `src/videos/<name>/`, register a new composition next to `BridgeShort` in `src/Root.tsx`, and rename it.
    - `SHOTS`: id, a/b frames, light day/golden, crowd mode, `tau` story time.
@@ -61,9 +75,14 @@ User rules that apply:
    - `toon.ts`: the Canvas2D `Pen` drawing API, 600x1000 design canvas, soles at y = 975, bean heads, stick limbs, plum variable-width outline, face library.
    - `cast.ts`: camera-facing billboards, crowds, effect cards, blinks, walk cycles. All billboards go on the `NOINK` layer.
    - `cardshade.ts`: cards lit by the scene light, no emissive.
+   - `bounce.ts` (copy from `templates/motion/`): springy motion for every main subject, see **Bouncy motion**.
+     Places carry `sx, sy, dy` (squash about the feet + hop height); vehicles carry `heave, bodyPitch, dy, sx, sy`.
 7. **Post** (`Bridge.tsx` + `ink.ts` + `lensblur.ts` + `grade.ts`).
    - Composer order: ink → lens pre → lens main → bloom → NEUTRAL tone map → grade (MSAA 4).
    - Every pixel parameter scales with output height / 1920.
+   - Subtitles: copy `templates/captions/Captions.tsx` next to the composition and mount `<Captions words={WORDS} />`
+     as the LAST layer (above the flash). Needs `npm install @remotion/google-fonts@<remotion version>` in `studio/`.
+     Input prop `{ captions: false }` hides them for look-check stills.
 8. **Sound** (`~/bridge-short/audio/`: timeline.py, sfx_gen.py, sfx.py, music.py, instruments.py, dsp.py, mix.py).
    - Event table → synthesized SFX plus an original score ducked under the voice.
    - Output: mix.wav (48 kHz, exact length), stems and cues.md.
@@ -73,7 +92,7 @@ User rules that apply:
    - Make side-by-sides against reference frames with `python scripts/sbs_sheet.py out.jpg --ours ... --ref ...`.
    - Send them to an Opus max verifier: 1-3 images, a ≤200-word verdict.
 10. **Final render.**
-    - `npx remotion render src/index.ts <Comp> out/<name>/video.mp4 --codec h264 --crf 16 --scale 1.3333`
+    - `npx remotion render src/index.ts <Comp> out/<name>/video.mp4 --codec h264 --crf 16 --scale 1.3333333333333333 --gl angle`
     - Mux with `-map 0:v:0 -map 1:a:0` (Remotion writes a silent audio track).
     - QA: `python scripts/short_qa.py final.mp4 out/<name>/qa shots.json` checks every frame for black, white, frozen and pop frames, plus loudness and sheets.
     - Fix anything it finds, then run a deep Opus audit.
@@ -126,6 +145,44 @@ lighting 5-6, ink 6, textures 5-6, characters 7, depth 6-7, composition 6-7 (fro
   - No blush or eye highlights. Faces at brightness ~.93.
   - Walk bob 3-7 %, lean 1-7°, planted feet.
   - Blinks every 0.5-2.3 s, lasting 4 f.
+
+## Subtitles (measured from the reference shorts in `audio-sample/`)
+Every video gets word-timed subtitles. `templates/captions/Captions.tsx` does all of this from words.json:
+- **Grouping:** 1-3 words per caption, at most ~14 characters ("every 39", "feet.", "a snake,"). A caption ends on
+  `. , ? !` and before a word that would overflow. Never split a name or a fixed pair if it can be avoided.
+- **Text:** exactly as spoken and as written in the script. Keep case and punctuation, numbers as digits. No emoji,
+  no keyword colouring, no all-caps.
+- **Look:** white Montserrat 800 (heavy rounded sans) at ~78 px for a 1080-wide frame, thick black outline (~7 px)
+  drawn under the fill, soft drop shadow (0 4 px 6 px, 55 % black). Centred horizontally, block centred at **70 %**
+  of the frame height (about the subject's chest; never over a face). Sizes scale with the output width.
+- **Timing:** hard cuts. A caption appears on its first word's start (2 frames early, like the picture's reactions) and
+  stays until the next caption, or 0.35 s past its last word before a real pause. No pop, fade, bounce or
+  karaoke highlight on the text itself (the reference has none).
+- **Checks:** captions never collide with a face or a key prop at the 70 % line (move the subject or the camera,
+  not the captions). They survive crossfades and the white flash (mounted last). After a voice re-take, re-copy
+  words.json and the captions follow automatically.
+
+## Bouncy motion (main subjects only; measured from `audio-sample/`)
+The reference feels springy: a sign drops in and settles with a small bounce; a sheriff hops out of his car, lands
+with a squash and stomps (squash) on "furious"; a train rocks and settles on its springs; nothing in the background
+ever moves. Use `templates/motion/bounce.ts` (pure functions of time since the event, so any frame renders alone):
+- **Who bounces:** the main subjects of the shot: characters, vehicles, story props (wrecks, signs being put up,
+  the map pin), effect cards (thought bubbles, stars, the brain). **Who never bounces:** background scenery: trees,
+  houses, mesas, poles, ground props and anything nobody is looking at. A prop is a subject only while the story is
+  about it (Bernie's signs pop up in the shot where he puts them up, then they stay rigid).
+- **Appear:** `popIn` (scale 0 → ~1.14 → 1, settled by ~0.4 s; spring 3 Hz, damping 0.42) with `popSquash`, or
+  `dropIn` from 2-3 m (falls stretched, lands squashed, 1-2 smaller hops, restitution ~0.3). Never a linear fade-in.
+- **Characters:** `breathe` always on standing cards (1.5 % at 0.45 Hz, phase per character). `hop` for cheers,
+  surprises and landings: 0.12 s anticipation dip (sy 0.9), stretched take-off (sy ~1.1), round at the apex,
+  landing squash (sy ~0.85, sx ~1.12), then a damped wobble (3.6 Hz, damping 0.36). `punch` (squash then spring
+  back, 4.5 Hz) on a reaction word: shock, stomp, laugh, the cut. Squash about the feet, volume preserved.
+- **Vehicles:** the body rides its springs with `carBody`: idle rumble (~7 mm), heave + nose-dip on every impact
+  (leaving the road, a crash) and a rock back (2-2.4 Hz, damping ~0.3). Wheels stay on the ground. Add `stepBob`
+  while ploughing sand or rough ground, `punch`/`impactSquash` on a crash. Drivers ride the same heave.
+- **Feel:** everything settles within ~0.3-0.6 s. Big beats get 2-3 visible overshoots, small ones one. Bounce
+  amplitude scales with the story beat (a crash > a wave). Reactions still land 0-3 frames before their word.
+- **Check:** render 8 consecutive stills every 3-4 frames around each bouncy beat and confirm the arc, the landing
+  squash and the settle. Background objects must be identical frame to frame.
 
 ## Look-match loop (how the bridge look was reached; reuse for any "make it look like X" pass)
 1. **Measure the reference first.** One analysis agent per topic (motion, depth, textures, characters, lighting, outlines, grade), each writing numbers, not adjectives, to `references/reports/<topic>.md`. Shared brief: `compare/CONTEXT.md`. Reports are the source of truth for every agent after.

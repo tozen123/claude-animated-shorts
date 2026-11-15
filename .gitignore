@@ -1,0 +1,10 @@
+# other creators' videos used only for private style study: never commit or push
+audio-sample/
+# API keys
+.env
+__pycache__/
+# Remotion studio
+studio/node_modules/
+studio/out/
+# your own shorts (scripts, voices, sound, renders) stay local
+projects/

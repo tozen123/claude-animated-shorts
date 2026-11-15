@@ -11,6 +11,11 @@ Proven on **The Bridge That Fell for a Song**, a 67 s short about the 1831 Broug
 |---|---|
 | `SKILL.md` | The skill: the full pipeline, every rule, every fix, and the final look values |
 | `templates/bridge/` | The full source of the bridge short: world, characters, ink, lens blur, grade, story/camera |
+| `templates/voice/make_voice.py` | Narration + word timings from ElevenLabs (`--voice "David"`, model `eleven_v3`); key goes in the root `.env` (see `.env.example`) |
+| `templates/captions/Captions.tsx` | Word-timed subtitles in the reference style (1-3 words, white Montserrat 800, black outline, 70 % height) |
+| `templates/motion/bounce.ts` | Springy motion for main subjects: pop-in, drop-in, hop with squash and stretch, punch, breathing, car springs |
+| `projects/<name>/` | One folder per short: `SCRIPT.md`, `voice/`, `audio/` |
+| `studio/` | The Remotion project the shorts render in (`src/videos/<name>/`); `npm install` once |
 | `templates/audio/` | The synthesized sound: SFX, march music, the mix with ducking and loudness |
 | `templates/scripts/` | Stills, side-by-side sheets, shot merge and frame-by-frame QA helpers |
 | `references/STYLE_BIBLE.md` | The script and visual formula measured from 20 reference shorts |
@@ -20,7 +25,7 @@ Proven on **The Bridge That Fell for a Song**, a 67 s short about the 1831 Broug
 
 ## Install
 1. Copy this folder to `~/.claude/skills/cartoon-3d-short/` (clone it there, or download the ZIP).
-2. You need [Remotion](https://www.remotion.dev/) with `@remotion/three`, plus Node, Python 3 and ffmpeg.
+2. You need [Remotion](https://www.remotion.dev/) with `@remotion/three`, plus Node, Python 3 and ffmpeg. For the voice, an [ElevenLabs](https://elevenlabs.io/) API key pasted into `.env` at the repo root.
 3. In Claude Code, say: *"Use the cartoon short skill and make a short about …"*.
 
 Claude then follows `SKILL.md`: topic and facts, then script, then voice, then the shot plan in `story.ts`, then stills, then renders. Agents check your frames against the reports and the frames, and you get the final 2K render and sound mix.
