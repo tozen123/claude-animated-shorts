@@ -17,6 +17,7 @@ Proven on **The Bridge That Fell for a Song**, a 67 s short about the 1831 Broug
 | `templates/fx/glow.ts` | Reference 3D look: glossy / chrome / brass materials, HDR emissives, lamp halos, god rays, sun haze, thin world ink, bloom preset |
 | `templates/fx/particles.ts` | Deterministic particles: sparks, embers, impact dust + debris, anger bolts, glowing eyes, rain, lightning, sparkles, sweat, shock lines |
 | `templates/fx/reactions.ts` | Expression-change reactions: face switch + body squash/hop + matching effect (glowing furious eyes, bolts, sweat, sparkles, shock lines) |
+| `templates/fx/dressing.ts` | Scene dressing and ambient life: grass tufts, flowers, gravel, rocks, bushes, fences, telegraph poles, props, furnished rooms (wainscot, pictures, bookcases, rugs, plants, clocks, curtains, desk clutter), birds, leaves, smoke, dust motes |
 | `projects/<name>/` | One folder per short: `SCRIPT.md`, `voice/`, `audio/` |
 | `studio/` | The Remotion project the shorts render in (`src/videos/<name>/`); `npm install` once |
 | `templates/audio/` | The synthesized sound: SFX, march music, the mix with ducking and loudness |

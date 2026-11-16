@@ -11,7 +11,8 @@ import { LIGHTS, LOOK, LightPreset } from "./lights";
 import { TONE, CHAR, untone } from "./shade";
 import { NOINK } from "./ink";
 import { SunGlare, lightShaft, lamp, brass, glossy } from "./glow";
-import { Pool, Actor, Fx, stage } from "./cast";
+import { Pool, Actor, Fx, stage, FxPlace } from "./cast";
+import * as DR from "./dressing";
 import { FPS, SHOTS, camAt, ShotDef, S, roadX, PETRICH_Z, GR_HUT, BG_HUT, GR_FLAG, BG_FLAG, ATHENS, SOFIA, PARIS, SCHOOL, V3 } from "./story";
 
 const SKY: Record<"day" | "golden", { c: string[]; e: number[] }> = {
@@ -61,6 +62,7 @@ export class World {
   private clouds: THREE.Mesh[] = []; private cloudMaps: Record<"day" | "golden", THREE.Texture[]>;
   private flags: Flag[] = [];
   private glare!: SunGlare;
+  private birds!: DR.Birds; private birdAt = new Map<number, THREE.Vector3 | null>();
   private frustum = new THREE.Frustum(); private m4 = new THREE.Matrix4(); private v = new THREE.Vector3(); private sph = new THREE.Sphere();
 
   constructor() {
@@ -85,6 +87,7 @@ export class World {
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(4096, 4096);
     R.add(this.hemi, this.sun, this.sun.target);
     this.glare = new SunGlare(R); // the reference's bright sun haze in the sky
+    this.birds = new DR.Birds(R, 5);
     this.cloudMaps = { day: [0, 1, 2, 3].map((k) => cloudHD(k, LOOK.day.cloud)), golden: [0, 1, 2, 3].map((k) => cloudHD(k, LOOK.golden.cloud)) };
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + 0.2, d = 1300 + (i % 3) * 150;
@@ -174,6 +177,34 @@ export class World {
       if (nearRoad(x, z, 4) || Math.hypot(x, z) < 9) continue;
       b.add(new THREE.DodecahedronGeometry(1, 0).scale(s * 1.2, s * 0.6, s), rockM, new THREE.Matrix4().makeTranslation(x, s * 0.2, z));
     }
+    // ---- dressing (reference: no bare ground) — tufts, flowers, gravel, rocks, bushes, fence + telegraph line ----
+    const roadPath: DR.XZ[] = []; for (let z = 60; z >= PETRICH_Z - 60; z -= 6) roadPath.push([roadX(z), z]);
+    const offRoad = (m: number) => (x: number, z: number) => !(z < 62 && z > PETRICH_Z - 62 && Math.abs(x - roadX(z)) < m) && Math.hypot(x - GR_HUT[0], z - GR_HUT[2]) > 1.6 && Math.hypot(x - BG_HUT[0], z - BG_HUT[2]) > 1.6;
+    DR.tufts(b, DR.scatter(31, 5200, -45, 45, -110, 55, offRoad(2.6)), { seed: 31, dry: 0.22 });
+    DR.tufts(b, [...DR.along(32, roadPath, 0.55, 2.55, 0.25), ...DR.along(33, roadPath, 0.55, -2.55, 0.25)], { seed: 32, scale: 1.2, dry: 0.15 });
+    DR.flowers(b, DR.scatter(34, 900, -35, 35, -90, 50, offRoad(3)), 34);
+    DR.pebbles(b, DR.scatter(35, 2600, -6, 6, -120, 58, (x, z) => Math.abs(x - roadX(z)) < 2.4), { seed: 35, size: 0.06, y: 0.02, cols: ["#9c7a52", "#8a7c6a", "#b3a58c", "#7c6a56", "#c4b496"] });
+    DR.pebbles(b, [...DR.along(36, roadPath, 0.35, 2.35, 0.2), ...DR.along(37, roadPath, 0.35, -2.35, 0.2)], { seed: 36, size: 0.1 });
+    DR.rocks(b, DR.scatter(38, 70, -40, 40, -100, 50, offRoad(4)), 38, 0.5);
+    DR.bushes(b, DR.scatter(39, 90, -45, 45, -110, 50, offRoad(4.5)), 39, 0.75, ["#4f8f45", "#5fa04c", "#3f7a3e", "#b9822f"]);
+    DR.fence(b, roadPath.filter(([, z]) => z < -9).map(([x, z]) => [x + 4.2, z] as DR.XZ));
+    DR.fence(b, roadPath.filter(([, z]) => z > 9).map(([x, z]) => [x + 4.2, z] as DR.XZ));
+    DR.poles(b, R, roadPath.map(([x, z]) => [x - 5.5, z] as DR.XZ), { gap: 24 });
+    // the posts: sandbags, crates, a barrel, a woodpile, a bench; a blank signpost at the line
+    DR.sandbags(b, GR_HUT[0] + 1.6, GR_HUT[2] - 1.2, 2.2, 3, 0.4); DR.sandbags(b, BG_HUT[0] - 1.6, BG_HUT[2] + 1.2, 2.2, 3, 0.4);
+    DR.crate(b, GR_HUT[0] - 1.3, GR_HUT[2] + 0.6, 0.6, 0.3); DR.crate(b, GR_HUT[0] - 1.25, GR_HUT[2] + 0.6, 0.45, 0.9, 0.6); DR.barrel(b, GR_HUT[0] - 1.2, GR_HUT[2] - 0.6);
+    DR.woodpile(b, BG_HUT[0] + 1.5, BG_HUT[2] - 0.3, 1.4); DR.barrel(b, BG_HUT[0] + 1.3, BG_HUT[2] + 1.0, 0.85); DR.crate(b, BG_HUT[0] - 0.3, BG_HUT[2] - 1.5, 0.55, 0.2);
+    DR.bench(b, GR_HUT[0] + 0.2, GR_HUT[2] + 1.6, Math.PI * 0.85); DR.signpost(b, -3.4, 1.2, 0.3);
+    // Petrich street life: barrels, crates, benches by the doors
+    for (let i = 0; i < 10; i++) { const z = PETRICH_Z + 26 - i * 9, sd = i % 2 ? 1 : -1, x = roadX(z) + sd * 5.6; if (i % 3 === 0) DR.barrel(b, x, z); else if (i % 3 === 1) DR.crate(b, x, z, 0.6, i); else DR.bench(b, x, z, sd > 0 ? -Math.PI / 2 : Math.PI / 2); }
+    DR.tufts(b, DR.scatter(40, 1200, -40, 40, PETRICH_Z - 60, PETRICH_Z + 60, (x, z) => Math.abs(x - roadX(z)) > 3.2), { seed: 40, dry: 0.3 });
+    // schoolyard edge: bushes, tufts, flowers, two benches
+    DR.tufts(b, DR.scatter(41, 1400, SCHOOL[0] - 30, SCHOOL[0] + 30, SCHOOL[2] - 30, SCHOOL[2] + 30, (x, z) => Math.hypot(x - SCHOOL[0], z - SCHOOL[2]) > 15.8), { seed: 41 });
+    DR.tufts(b, DR.scatter(44, 160, SCHOOL[0] - 15, SCHOOL[0] + 15, SCHOOL[2] - 15, SCHOOL[2] + 15, (x, z) => Math.hypot(x - SCHOOL[0], z - SCHOOL[2]) > 11), { seed: 44, dry: 0.6, y: 0.02 });
+    DR.bushes(b, DR.scatter(42, 26, SCHOOL[0] - 24, SCHOOL[0] + 24, SCHOOL[2] - 24, SCHOOL[2] + 24, (x, z) => Math.hypot(x - SCHOOL[0], z - SCHOOL[2]) > 17), 42, 0.9);
+    DR.flowers(b, DR.scatter(43, 200, SCHOOL[0] - 25, SCHOOL[0] + 25, SCHOOL[2] - 25, SCHOOL[2] + 25, (x, z) => Math.hypot(x - SCHOOL[0], z - SCHOOL[2]) > 16.5), 43);
+    DR.pebbles(b, DR.scatter(45, 260, SCHOOL[0] - 15, SCHOOL[0] + 15, SCHOOL[2] - 15, SCHOOL[2] + 15, (x, z) => Math.hypot(x - SCHOOL[0], z - SCHOOL[2]) < 15), { seed: 45, size: 0.05, y: 0.02 });
+    DR.bench(b, SCHOOL[0] - 9, SCHOOL[2] - 7, 0.6); DR.bench(b, SCHOOL[0] + 9, SCHOOL[2] - 7, -0.6);
     // ---- Petrich: tiled-roof houses along the road, a church tower ----
     for (let i = 0; i < 18; i++) {
       const z = PETRICH_Z + 30 - i * 8.5, side = i % 2 ? 1 : -1, x = roadX(z) + side * (9 + (i % 3) * 3);
@@ -213,10 +244,43 @@ export class World {
     b.add(boxGeo(V(wx - 0.9, 1.0, z - D + 0.0), V(wx + 0.9, 2.7, z - D + 0.06)), glass);
     for (const [x0, x1, y0, y1] of [[wx - 1.0, wx + 1.0, 0.92, 1.02], [wx - 1.0, wx + 1.0, 2.68, 2.78], [wx - 1.0, wx - 0.9, 1.0, 2.7], [wx + 0.9, wx + 1.0, 1.0, 2.7], [wx - 0.04, wx + 0.04, 1.0, 2.7]])
       b.add(boxGeo(V(x0, y0, z - D), V(x1, y1, z - D + 0.1)), frame);
+    this.dress(b, o, key, wx, W, D, H);
     if (flag) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.07), new THREE.MeshBasicMaterial({ map: flagTexture(flag), color: 0xe0e0e0 }));
       m.position.set(x - 1.9, 2.0, z - D + 0.03); m.layers.set(NOINK); this.root.add(m);
       b.add(boxGeo(V(x - 2.8, 2.5, z - D + 0.02), V(x - 1.0, 2.58, z - D + 0.1)), lam("rod", () => ({ color: "#c9a24e" })));
+    }
+  }
+
+  /** reference rooms are full: wainscot, pictures, shelves, a rug, plants, a cabinet / clock, curtains */
+  private dress(b: Batch, o: V3, key: string, wx: number, W: number, D: number, H: number) {
+    const [x, , z] = o, bz = z - D, front = z + 1.5;
+    const back: DR.XZ[] = [[x - W, bz], [x + W, bz]], left: DR.XZ[] = [[x - W, front], [x - W, bz]], right: DR.XZ[] = [[x + W, bz], [x + W, front]];
+    const wc = key === "athens" ? "#7a4b2a" : key === "sofia" ? "#5f6f4a" : "#8a5a3a";
+    const win: [number, number] = [wx - x + W - 1.05, wx - x + W + 1.05];
+    DR.wainscot(b, back[0], back[1], wc, [win]); DR.wainscot(b, left[0], left[1], wc); DR.wainscot(b, right[0], right[1], wc);
+    const u = (wxx: number) => wxx - (x - W); // back wall: metres from the left corner
+    const sideL = (d: number, y: number) => DR.onWall(left[0], left[1], d, y), sideR = (d: number, y: number) => DR.onWall(right[0], right[1], d, y);
+    DR.bookcase(b, sideL(1.4, 0.06), 1.3, 2.3, 1); DR.bookcase(b, sideR(1.6, 0.06), 1.3, 2.3, 2);
+    DR.picture(b, sideL(3.4, 2.0), 0.7, 0.55, "landscape", 3); DR.picture(b, sideR(3.6, 2.0), 0.7, 0.55, "sea", 4);
+    if (key === "athens") {
+      DR.picture(b, DR.onWall(back[0], back[1], u(x + 0.1), 2.15, 0), 0.8, 0.6, "landscape", 1);
+      DR.cabinet(b, DR.onWall(back[0], back[1], u(x - 1.55), 0.06), 0.55, 1.3);
+      DR.plant(b, x + W - 0.45, bz + 0.45, 1.3, 0.06); DR.plant(b, x - W + 0.4, bz + 0.4, 1.3, 0.06);
+      DR.rug(b, x, z - 0.4, 3.6, 2.6, 0.06, ["#8a2f2f", "#d8b878", "#2f4a6a"]);
+      DR.deskClutter(b, x - 0.1, 0.94, z - 0.55, 1, false);
+    } else if (key === "sofia") {
+      DR.wallClock(b, DR.onWall(back[0], back[1], u(x + 0.2), 2.4, 0), 0.24);
+      DR.picture(b, DR.onWall(back[0], back[1], u(x + 0.15), 1.65, 0), 0.6, 0.42, "map", 2, false);
+      DR.cabinet(b, DR.onWall(back[0], back[1], u(x - 1.5), 0.06), 0.55, 1.3); DR.cabinet(b, DR.onWall(back[0], back[1], u(x - 0.9), 0.06), 0.55, 1.3);
+      DR.plant(b, x + W - 0.45, bz + 0.45, 1.2, 0.06);
+      DR.rug(b, x, z - 0.3, 3.0, 2.4, 0.06, ["#2f4a6a", "#d8b878", "#8a2f2f"]);
+      DR.deskClutter(b, x - 0.1, 0.94, z - 0.3, 2, false);
+    } else {
+      DR.curtains(b, DR.onWall(back[0], back[1], u(wx), 0.9, 0), 1.8, 1.95);
+      for (const s of [-1, 1]) { DR.picture(b, DR.onWall(back[0], back[1], u(x + s * 2.0), 2.0, 0), 0.7, 0.9, "portrait", 5 + s); DR.bookcase(b, DR.onWall(back[0], back[1], u(x + s * 3.6), 0.06), 1.2, 2.6, 3 + s); DR.plant(b, x + s * 2.6, bz + 0.4, 1.3, 0.06); }
+      DR.rug(b, x, z - 0.2, 3.4, 5.6, 0.06, ["#6a2a34", "#d8b878", "#2f5a4a"]);
+      for (let k = 0; k < 4; k++) for (const s of [-1, 1]) DR.deskClutter(b, x + s * 0.4, 0.88, z - 1.8 + k * 1.1, 10 + k * 2 + s, false, false);
     }
   }
 
@@ -323,6 +387,15 @@ export class World {
     // ---- cast + effects ----
     const right = V(0, 0, 0).setFromMatrixColumn(cam.matrixWorld, 0);
     const st = stage(id, t, { pos: cam.position, right });
+    // ambient life (reference: birds in most outdoor skies, leaves in autumn, motes in sunbeams); never bounces
+    const indoor = id === S.ATHENS || id === S.BILL || id === S.UNFAIR || id === S.SOFIA || id === S.PARIS;
+    if (!this.birdAt.has(id)) {
+      const c0 = camAt(id, s.a), fw = V(c0.look[0] - c0.pos[0], 0, c0.look[2] - c0.pos[2]).normalize();
+      this.birdAt.set(id, indoor ? null : V(...c0.pos).addScaledVector(fw, 70).add(V(0, 26 + c0.pos[1] * 0.5, 0)));
+    }
+    this.birds.place(t, this.birdAt.get(id) ?? null, 1.1);
+    if (!indoor && id !== S.SCHOOL && id !== S.DOG) st.fx.push(...(DR.leaves(t, [c.look[0], 0, c.look[2]], id, { n: 12, radius: 6, height: 5, size: 0.14 }) as FxPlace[]));
+    if (indoor) { const o = id === S.SOFIA ? SOFIA : id === S.PARIS ? PARIS : ATHENS; st.fx.push(...(DR.motes(t, [o[0] + (id === S.PARIS ? 0 : 1.6), 1.6, o[2] - 1.8], id, { n: 16, size: [1.6, 1.6, 1.6] }) as FxPlace[])); }
     this.frustum.setFromProjectionMatrix(this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
     let ai = 0;
     const used: Actor[] = [];

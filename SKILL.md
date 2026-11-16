@@ -228,6 +228,16 @@ render additively in HDR (cast.ts `Fx.use(soft, glow, tint)`) and bloom; plain c
 - **Check:** render strips of 3-6 frames across each reaction and action: the face changes on the frame, the squash
   lands, the glow blooms and the particles arc, fade and disappear.
 
+## Scene dressing and liveliness (measured from `audio-sample/`; `templates/fx/dressing.ts`)
+No sample frame shows bare ground or a bare wall. Before stills, every set must pass this list:
+- **Ground:** grass tufts on every verge and field (thousands, densest along roads and walls, ~20 % dry/yellow in autumn), wildflower specks, gravel and pebbles on every road and track bed, a few rocks and round bushes. `tufts`, `flowers`, `pebbles`, `rocks`, `bushes` with `scatter` (area) or `along` (verge strip).
+- **Lines that lead the eye:** a fence or telegraph/power line receding along each road (`fence`, `poles` with sagging wires). Pick what fits the era.
+- **Props where people live or work:** crates, barrels, sandbags at military posts, woodpiles, benches, a blank signpost (`crate`, `barrel`, `sandbags`, `woodpile`, `bench`, `signpost`). Group them in 2-4 near doors and huts, never in a grid.
+- **Rooms:** plank floor, wainscot with panels and a chair rail, 2+ framed pictures (landscape, sea, portrait, map, painted only, no text), bookcases, a rug under the main furniture, a plant in a corner, a cabinet or a wall clock, curtains on formal windows, and clutter on every desk (papers, pen pot, books, a period telephone). Use `onWall`, `wainscot`, `picture`, `bookcase`, `rug`, `plant`, `cabinet`, `wallClock`, `curtains`, `deskClutter`.
+- **Ambient life (moves, never bounces):** a few birds gliding/flapping in outdoor skies (`Birds`, anchored once per shot ~70 m ahead, 26 m up), drifting leaves in tree or autumn shots (`leaves`), chimney smoke (`smoke`), glowing dust motes in indoor sunbeams (`motes`). Flags and cloth wave.
+- **Crowds:** when a scene implies people (a council, a town, a schoolyard, an army), fill the back with extras that breathe and blink.
+- **Checks on stills:** dressing must never sit between the lens and a face. Keep plants and props out of the desk/subject line, since a plant behind a desk reads as a lump on the desk. Small stacked boxes on a table read as toy bricks, so use papers instead. Keep dressing off the subject's silhouette, and keep poles out of the frame centre.
+
 ## Look-match loop (how the bridge look was reached; reuse for any "make it look like X" pass)
 1. **Measure the reference first.** One analysis agent per topic (motion, depth, textures, characters, lighting, outlines, grade), each writing numbers, not adjectives, to `references/reports/<topic>.md`. Shared brief: `compare/CONTEXT.md`. Reports are the source of truth for every agent after.
 2. **Sandboxes, one owner per file.** Copy the project folder to `src/videos/<name>_{cam,world,mat,char,post}` with entries `src/sandboxes/<n>/index.tsx` (same `index.tsx` as main, only the import path changed). Ownership used for the bridge:
