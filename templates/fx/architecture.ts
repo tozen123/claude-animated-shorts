@@ -34,7 +34,8 @@ const pen = (b: Batch, M: M4) => {
 // ---------------- textures ----------------
 /** siding: "clap" (horizontal lap boards with a shadow under each), "board" (board and batten), "log" (round logs with
  *  light chinking), "plank" (weathered vertical planks). 512 px = 2 m: use tile 2 on boxGeo */
-export const sidingTex = (col: string, kind: "clap" | "board" | "log" | "plank") => ctex(`siding_${kind}_${col}`, 512, 512, (g, r) => {
+export type Siding = "clap" | "board" | "log" | "plank" | "brick";
+export const sidingTex = (col: string, kind: Siding) => ctex(`siding_${kind}_${col}`, 512, 512, (g, r) => {
   const c = new THREE.Color(col), s = (k: number) => "#" + c.clone().multiplyScalar(k).getHexString();
   g.fillStyle = col; g.fillRect(0, 0, 512, 512);
   if (kind === "clap") {
@@ -51,6 +52,14 @@ export const sidingTex = (col: string, kind: "clap" | "board" | "log" | "plank")
       if (kind === "board") { g.fillStyle = s(1.12); g.fillRect(x - 7, 0, 14, 512); g.fillStyle = s(0.7); g.fillRect(x + 7, 0, 3, 512); } // batten + its shadow
       for (let k = 0; k < 4; k++) { g.fillStyle = s(0.78); g.fillRect(x + 8 + r() * (bw - 16), r() * 512, 2, 30 + r() * 80); } // grain
       g.fillStyle = s(0.45); for (const y of [40, 470]) { g.beginPath(); g.arc(x + bw / 2, y, 3, 0, 7); g.fill(); }        // nails
+    }
+  } else if (kind === "brick") {
+    // running bond, 16 courses per 2 m: each brick a slightly different tone, light mortar, a dark lower lip per course
+    g.fillStyle = "#d8cbb8"; g.fillRect(0, 0, 512, 512);
+    for (let y = 0, row = 0; y < 512; y += 32, row++) for (let x = (row % 2) * -32; x < 512; x += 64) {
+      g.fillStyle = s(0.82 + r() * 0.3); g.fillRect(x + 3, y + 3, 58, 26);
+      g.fillStyle = s(0.6); g.fillRect(x + 3, y + 25, 58, 4);
+      if (r() < 0.25) { g.fillStyle = "rgba(255,240,220,0.12)"; g.fillRect(x + 8, y + 6, 20, 6); }
     }
   } else {
     for (let y = 0; y < 512; y += 64) {
@@ -75,7 +84,7 @@ export const glassTex = (lit: boolean) => ctex(lit ? "glassLit" : "glassDay", 12
 });
 
 // ---------------- pictograms (signs carry shapes, never words) ----------------
-export type Picto = "pick" | "shovel" | "loaf" | "bed" | "anvil" | "bottle" | "coin" | "tooth" | "boot";
+export type Picto = "pick" | "shovel" | "loaf" | "bed" | "anvil" | "bottle" | "coin" | "tooth" | "boot" | "cross" | "flask";
 const shapeGeo = (draw: (s: THREE.Shape) => void, depth = 0.03) => { const s = new THREE.Shape(); draw(s); return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false, curveSegments: 10 }); };
 /** a pictogram ~1 m across centred on the origin in the xy plane, 3 cm thick toward +z */
 export const pictoGeo = (k: Picto): THREE.BufferGeometry[] => {
@@ -90,6 +99,8 @@ export const pictoGeo = (k: Picto): THREE.BufferGeometry[] => {
     case "bottle": return [rect(-0.05, 0.15, 0.05, 0.42), shapeGeo((s) => { s.moveTo(-0.16, -0.42); s.lineTo(0.16, -0.42); s.lineTo(0.16, 0.05); s.quadraticCurveTo(0.12, 0.18, 0, 0.18); s.quadraticCurveTo(-0.12, 0.18, -0.16, 0.05); s.closePath(); })];
     case "coin": return [ell(0, 0, 0.4, 0.4)];
     case "tooth": return [shapeGeo((s) => { s.moveTo(-0.3, 0.3); s.quadraticCurveTo(0, 0.45, 0.3, 0.3); s.lineTo(0.22, -0.4); s.lineTo(0.08, -0.4); s.lineTo(0, -0.1); s.lineTo(-0.08, -0.4); s.lineTo(-0.22, -0.4); s.closePath(); })];
+    case "cross": return [rect(-0.13, -0.42, 0.13, 0.42), rect(-0.42, -0.13, 0.42, 0.13)];
+    case "flask": return [rect(-0.07, 0.1, 0.07, 0.42), shapeGeo((s) => { s.moveTo(-0.07, 0.1); s.lineTo(0.07, 0.1); s.lineTo(0.36, -0.36); s.quadraticCurveTo(0.38, -0.42, 0.3, -0.42); s.lineTo(-0.3, -0.42); s.quadraticCurveTo(-0.38, -0.42, -0.36, -0.36); s.closePath(); })];
     case "boot": return [shapeGeo((s) => { s.moveTo(-0.2, 0.42); s.lineTo(0.1, 0.42); s.lineTo(0.1, -0.15); s.lineTo(0.42, -0.25); s.lineTo(0.42, -0.42); s.lineTo(-0.2, -0.42); s.closePath(); })];
   }
 };
@@ -147,8 +158,9 @@ export type HouseSpec = {
   w: number; d: number; h: number;                  // footprint and eave height (all floors)
   floors?: 1 | 2;
   wall: string; trim: string; roof?: string;        // colours
-  siding?: "clap" | "board" | "log" | "plank";
-  roofKind?: "gable" | "gableFront" | "falseFront" | "shed";
+  siding?: Siding;
+  /** parapet: a flat roof hidden behind a stone-capped parapet with a cornice and chimney stacks (city terraces) */
+  roofKind?: "gable" | "gableFront" | "falseFront" | "shed" | "parapet";
   rise?: number;                                    // roof rise above the eave
   door?: { x: number; w?: number; h?: number; col?: string; glass?: boolean };
   windows?: { x: number; y: number; w?: number; h?: number; side?: "front" | "left" | "right" | "back"; o?: WinOpts }[];
@@ -195,6 +207,21 @@ export const house = (b: Batch, M: M4, s: HouseSpec): HouseOut => {
   };
   if (kind === "gable") gable("x");
   else if (kind === "gableFront") gable("z");
+  else if (kind === "parapet") {
+    const ph = 0.75; top = h + ph + 1.1;
+    box(-w / 2 + 0.1, h - 0.1, -d / 2 + 0.1, w / 2 - 0.1, h + 0.1, d / 2 - 0.1, RD);                          // flat roof
+    for (const [x0, z0, x1, z1] of [[-w / 2, d / 2 - 0.25, w / 2, d / 2], [-w / 2, -d / 2, w / 2, -d / 2 + 0.25], [-w / 2, -d / 2, -w / 2 + 0.25, d / 2], [w / 2 - 0.25, -d / 2, w / 2, d / 2]] as const)
+      box(x0, h, z0, x1, h + ph, z1, W, undefined, 2);                                                        // parapet
+    box(-w / 2 - 0.08, h + ph, -d / 2 - 0.08, w / 2 + 0.08, h + ph + 0.1, d / 2 + 0.08, flatM("#d8d0c0"));  // stone coping
+    box(-w / 2 - 0.16, h - 0.32, d / 2, w / 2 + 0.16, h - 0.14, d / 2 + 0.2, flatM("#e8e0d0"));               // cornice
+    for (let x = -w / 2 + 0.3; x <= w / 2 - 0.25; x += 0.45) box(x - 0.05, h - 0.5, d / 2, x + 0.05, h - 0.32, d / 2 + 0.14, flatM("#e8e0d0")); // dentils
+    for (const sx of [-1, 1]) { // chimney stacks on the party walls with pots
+      const cx = sx * (w / 2 - 0.45);
+      box(cx - 0.4, h, -0.5, cx + 0.4, h + ph + 1.0, 0.5, W, undefined, 2);
+      box(cx - 0.46, h + ph + 1.0, -0.56, cx + 0.46, h + ph + 1.1, 0.56, flatM("#d8d0c0"));
+      for (const pz of [-0.25, 0.0, 0.25]) add(new THREE.CylinderGeometry(0.08, 0.1, 0.4, 8).translate(cx, h + ph + 1.3, pz), flatM("#b8643a"));
+    }
+  }
   else if (kind === "shed") { const a = Math.atan2(rise, d), Ls = (d + 2 * oh) / Math.cos(a); box(-w / 2 - 0.3, 0, 0, w / 2 + 0.3, th, Ls, roofM, E(0, h + rise + oh * Math.tan(a), -d / 2 - oh, 0, a), 1.5); }
   else { // false front: a low gable hidden behind a tall flat front with a stepped parapet, a cornice on brackets and a sign
     gable("z", true);

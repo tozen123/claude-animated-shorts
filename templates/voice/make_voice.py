@@ -158,6 +158,37 @@ def loudness(wav):
     return float(m.group(1)) if m else float("nan")
 
 
+def align_to_script(words, script_words):
+    """Speech-to-text words carry good times but its own spelling ("mold", "blue" + "-green"). Re-label them with the
+    script's words: match normalised tokens (difflib), copy times for matches, spread each unmatched run of script words
+    evenly over the time span of the speech words it replaces."""
+    import difflib
+    norm = lambda t: re.sub(r"[^a-z0-9]", "", t.lower().replace("ou", "o"))
+    a, b = [norm(w["w"]) for w in words], [norm(t) for t in script_words]
+    out = [None] * len(script_words)
+    for tag, i0, i1, j0, j1 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            for k in range(j1 - j0):
+                out[j0 + k] = {"w": script_words[j0 + k], "s": words[i0 + k]["s"], "e": words[i0 + k]["e"]}
+        elif j1 > j0:
+            if i1 > i0:
+                t0, t1 = words[i0]["s"], words[i1 - 1]["e"]
+            else:  # script words the speech-to-text dropped: squeeze them into the gap
+                t0 = words[i0 - 1]["e"] if i0 > 0 else 0.0
+                t1 = words[i0]["s"] if i0 < len(words) else t0 + 0.3 * (j1 - j0)
+            d = max(t1 - t0, 0.05 * (j1 - j0)) / (j1 - j0)
+            for k in range(j1 - j0):
+                out[j0 + k] = {"w": script_words[j0 + k], "s": round(t0 + k * d, 3), "e": round(t0 + (k + 1) * d, 3)}
+    return out
+
+
+def drop_untightened(vdir):
+    """A new voice.wav makes the saved untightened copies stale (--tighten always works from them)."""
+    for b in ("voice_untightened.wav", "words_untightened.json"):
+        if os.path.exists(os.path.join(vdir, b)):
+            os.remove(os.path.join(vdir, b))
+
+
 def tighten(vdir, sent=0.24, comma=0.14, xf=0.008):
     """The reference narration runs with almost no pauses (0-2 gaps > 0.35 s per short). Cut each silent gap between
     words down to `sent` (after . ? !) or `comma` seconds, only where the audio really is silent, with short crossfades;
@@ -216,6 +247,7 @@ def take(args, key, voice_id, text, out_dir, n):
     os.makedirs(out_dir, exist_ok=True)
     raw = os.path.join(out_dir, "voice_raw.mp3" if args.format.startswith("mp3") else "voice_raw.pcm")
     open(raw, "wb").write(base64.b64decode(res["audio_base64"]))
+    drop_untightened(out_dir)
     wav = os.path.join(out_dir, "voice.wav")
     inp = ["-f", "s16le", "-ar", args.format.split("_")[1], "-ac", "1", "-i", raw] if raw.endswith(".pcm") else ["-i", raw]
     # 48 kHz mono 24-bit, gain only (the mix sets the final level; the skill keeps the voice unprocessed)
@@ -260,9 +292,12 @@ def main():
         if not args.project:
             ap.error("project folder required")
         vdir = os.path.join(args.project, "voice"); os.makedirs(vdir, exist_ok=True)
-        wav = os.path.join(vdir, "voice.wav")
+        wav = os.path.join(vdir, "voice.wav"); drop_untightened(vdir)
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", args.from_file, "-ar", "48000", "-ac", "1", "-c:a", "pcm_s24le", wav], check=True)
         words = whisper_words(wav)
+        sp = args.script or os.path.join(args.project, "SCRIPT.md")
+        if os.path.exists(sp) and script_lines(sp):  # caption with the script's spelling, not the recogniser's
+            words = align_to_script(words, TAG.sub("", " ".join(script_lines(sp))).split())
         json.dump(words, open(os.path.join(vdir, "words.json"), "w", encoding="utf-8"), indent=0)
         dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav]))
         span = words[-1]["e"] - words[0]["s"] if words else dur
@@ -280,6 +315,7 @@ def main():
     vdir = os.path.join(args.project, "voice")
     if args.use:
         import shutil
+        drop_untightened(vdir)
         for f in ("voice.wav", "words.json"):
             shutil.copy2(os.path.join(vdir, "takes", str(args.use), f), os.path.join(vdir, f))
         print("using take", args.use)

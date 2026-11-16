@@ -22,7 +22,11 @@ export type Outfit = {
   /** reference clothing is never plain: a pattern clipped to the torso (pattern colour defaults to a darker jacket) */
   pattern?: "stripes" | "plaid" | "dots" | "studs"; patternCol?: string;
   /** small costume details: pockets, suspenders (detailCol), a polka-dot bandana, a gold watch chain, collar + tie */
-  details?: ("pockets" | "suspenders" | "bandana" | "chain" | "collar")[]; detailCol?: string;
+  details?: ("pockets" | "suspenders" | "bandana" | "chain" | "collar" | "coat" | "bowtie")[]; detailCol?: string;
+  /** bow tie colour (details "bowtie"); a lab coat ("coat") opens over a shirt in detailCol */
+  tie?: string;
+  /** a red cold nose on the front face */
+  nose?: string;
   /** hair colour peeking out under a hat (a soft patch at the back / side of the head) */
   hairSide?: string;
 };
@@ -644,6 +648,20 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
         if (o.pattern === "dots") for (let y = y0, r = 0; y < y1; y += 10 * u, r++) for (let x = x0 + (r % 2) * 5 * u; x < x1; x += 10 * u) p.dot(x, y, 1.9 * u, pc);
         if (o.pattern === "studs") for (let y = y0 + 6 * u, r = 0; y < y1; y += 9 * u, r++) for (let x = x0 + (r % 2) * 4.5 * u; x < x1; x += 9 * u) { p.dot(x, y, 2.6 * u, INK); p.dot(x, y, 1.8 * u, o.patternCol ?? "#e8c45a"); }
         const D = o.details ?? [], dc = o.detailCol ?? "#5a3b2a";
+        if (D.includes("coat")) { // open lab coat: shirt in the V, lapel folds, two low patch pockets
+          p.poly([[tcx - 16 * u, chin - 0.2 * HH], [tcx + 16 * u, chin - 0.2 * HH], [tcx + 2 * u, chin + 0.62 * HH], [tcx - 2 * u, chin + 0.62 * HH]], o.detailCol ?? "#dfe8f2", 1.5 * u);
+          for (const sd of [-1, 1]) {
+            p.poly([[tcx + sd * 16 * u, chin - 0.2 * HH], [tcx + sd * 24 * u, chin + 0.1 * HH], [tcx + sd * 2 * u, chin + 0.62 * HH]], shade(o.jacket, 0.9), 1.5 * u);
+            const px = tcx + sd * 0.55 * T.a, py = chin + 0.75 * HH;
+            p.poly(box(px, py, 10 * u, 8 * u), shade(o.jacket, 0.93), 1.4 * u);
+          }
+          p.stroke([[tcx + 0.5 * T.a - 3 * u, chin + 0.5 * HH], [tcx + 0.5 * T.a - 3 * u, chin + 0.68 * HH]], 2.6 * u, "#3a5a9a"); // a pen in the breast pocket
+        }
+        if (D.includes("bowtie")) {
+          const by = chin - 0.06 * HH, tc = o.tie ?? "#2f4a8a";
+          for (const sd of [-1, 1]) p.poly([[tcx + sd * 2 * u, by], [tcx + sd * 15 * u, by - 7 * u], [tcx + sd * 15 * u, by + 7 * u]], tc, 1.6 * u);
+          p.ell(tcx, by, 3.6 * u, 3.6 * u, shade(tc, 0.8), 1.4 * u);
+        }
         if (D.includes("collar")) {
           p.poly([[tcx - 13 * u, chin - 0.15 * HH], [tcx, chin + 0.16 * HH], [tcx + 13 * u, chin - 0.15 * HH]], "#f4f1ea", 1.6 * u);
           p.poly([[tcx - 3 * u, chin], [tcx + 3 * u, chin], [tcx + 4.5 * u, chin + 0.3 * HH], [tcx, chin + 0.37 * HH], [tcx - 4.5 * u, chin + 0.3 * HH]], o.detailCol ?? "#2b2a30", 1.4 * u);
@@ -711,6 +729,7 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
   hatOn(p, o, hp, H, 300, hc, light, seed, facing, false);
   const brim = !!o.hat && o.hat !== "hair" && o.hat !== "bonnet" && o.hat !== "cap";
   faceFront(p, 300, hc, W, expr, facing, look, lid, brim, skin, o.moustache, o.build === "stout");
+  if (o.nose) p.ell(300 + 8 * u * facing, hc + 9 * u, 6.5 * u, 5.5 * u, o.nose, 1.6 * u);
   p.rot = null;
 };
 

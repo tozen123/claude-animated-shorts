@@ -32,11 +32,12 @@ User rules that apply:
    - Write the facts with their source at the top of `SCRIPT.md`.
 2. **Script** (~3.7 words/s, 55-70 s). Beat formula from the bridge short:
    - **Hook:** the absurd fact in one line ("Seventy-four soldiers knocked down an iron bridge just by walking across it.").
-   - **Setting:** year, place, pride.
+   - **Setting:** starts with the pivot **"You see,"** then year, place, pride (the user rejects scripts without this flow).
    - **Action:** escalation over three or four beats, each a little bigger.
    - **Snap:** the moment it breaks.
    - **Deadpan double line:** "Luckily ... / Unluckily ...".
-   - **Explanation:** one physics idea through an everyday analogy (the kid on a swing).
+   - **Mystery beat:** a "Wait, …?" question right at the snap.
+   - **Explanation:** "So how/what …? Well, …" then one physics idea through an everyday analogy (the kid on a swing).
    - **Consequence:** the rule it created.
    - **Callback twist:** the ending.
    - Never describe on screen what the viewer already sees.
@@ -56,6 +57,12 @@ User rules that apply:
      generate library voices on elevenlabs.io and bring the file in with `--from-file <audio>`.
    - A recorded voice works too: drop in `voice.wav` and make `words.json` with any speech-to-text with word times.
    - Hand-fix the word timings. Everything is timed to words.json.
+   - A take is ~3.0 words/s raw at speed 1.15 and lands ~3.4 after `--tighten`: budget ~220 words for 60 s (242 words
+     gave 70 s at 1.15; speed 1.2 + tighten gave 63 s).
+   - Every new take (and `--use`, `--from-file`) now deletes the old `voice_untightened.wav` / `words_untightened.json`.
+     Before that fix, `--tighten` silently re-tightened the PREVIOUS take and overwrote the new one.
+   - `--from-file` / speech-to-text words are re-labelled with the script's own spelling (`align_to_script`), so the
+     captions say "mould", not the recogniser's "mold".
 4. **Shot plan** in `story.ts`: copy `templates/bridge/` plus the `templates/fx/` tools you use into `studio/src/videos/<name>/`. Register the short by adding `composition.ts` there: `export default { id: "<Name>Short", component, durationInFrames }`. `studio/src/index.ts` discovers every `src/videos/*/composition.ts` on its own, so never edit it per project.
    - Project folders are git-ignored (`studio/src/videos/`, like `projects/`): anything only one short needs stays local. Anything reusable goes back into `templates/`.
    - `SHOTS`: id, a/b frames, light day/golden, crowd mode, `tau` story time.
@@ -405,8 +412,8 @@ Use this as the target for every new character, prop and set. The code lives in 
 No building is a bare box. Build every house and shop with `house(b, matrix, spec)`, which adds the parts the samples
 always show. The parts are also what gives the ink pass its many small interior lines.
 - **Base and walls:** a stone plinth and a water-table board where the walls meet the ground. Corner boards proud of
-  the wall. Siding with readable courses: `clap`, `board` (board and batten), `log` or `plank` (`sidingTex`, with a
-  darker splash band at the foot). A frieze board under the eaves, and a belt course between floors.
+  the wall. Siding with readable courses: `clap`, `board` (board and batten), `log`, `plank` or `brick` (running bond;
+  `sidingTex`, with a darker splash band at the foot). A frieze board under the eaves, and a belt course between floors.
 - **Windows** (`windowAt`): a casing, a deeper sill, a header cap, cross mullions, painted glass (sky above the room,
   two white streaks), curtains inside. Add shutters with louvres or a flower box on homes.
 - **Doors** (`doorAt`): a casing, two raised panels (or a glass top), a brass knob, a transom on wide doors, and steps
@@ -414,6 +421,8 @@ always show. The parts are also what gives the ink pass its many small interior 
 - **Roofs:** slabs with thickness, a 0.45 m overhang, fascia and barge boards, a ridge cap, gable ends filled with
   siding. A false front (western or shop street) is a tall flat front with a stepped crown, a cornice on brackets and
   a framed sign. The roof behind it stops inside the front.
+  City terraces use `roofKind: "parapet"`: a flat roof behind a parapet with stone coping, a dentil cornice and
+  chimney stacks with pots on the party walls (the 1928 London street). Pictograms now include `cross` and `flask`.
 - **Signs:** pictograms only (`Picto`: pick, shovel, loaf, bed, anvil, bottle, coin, tooth, boot), never words.
 - **Porch / boardwalk:** a deck, a step, posts with brackets, a railing with balusters (open at the door), and a
   shingled shed roof or a striped awning with a scalloped valance. An upper balcony on brackets for 2-floor buildings.
@@ -454,6 +463,11 @@ always show. The parts are also what gives the ink pass its many small interior 
 5. Contracts between owners live in exported constants (e.g. `NOINK` layer from ink.ts, `dofAt`/`FOREGROUND` from story.ts, `LIGHTS`/`LOOK` from lights.ts). Changing a contract means telling every owner that reads it.
 
 ## Gotchas
+- **The vertical frame is narrow.** At fov 50 the horizontal half-angle is only ~15 degrees: three people standing 1.4 m
+  apart need the camera ~5 m back. Check every group shot's x spread against `tan(fov/2) * 9/16 * distance`; museum
+  visitors placed 1.6 m off-axis at 4.5 m were simply out of frame. Stack groups in depth instead of width.
+- **Props near a pivoting awning or shelf:** work out where a tilted board's front edge really is (rotateX(+a) drops the
+  +z end by `len * sin(a)`) before holding a prop up under it; the Peoria melon vanished behind the awning.
 - **Walker heading = the real motion.** Pass `walker()` the direction the character actually moves (the sign of dz when z falls over time). A wrong sign makes the card pick a side or back view, so a crowd running at the camera shows everyone side-on or walking backwards. Check one still mid-run: people coming toward the lens face front.
 - Kenney nature-kit materials are teal: recolour them by material name in build.ts.
 - Cameras end up inside houses: the sight-line culler in build.ts/world.ts removes anything blocking any camera ray.
