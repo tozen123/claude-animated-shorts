@@ -56,12 +56,12 @@ User rules that apply:
      generate library voices on elevenlabs.io and bring the file in with `--from-file <audio>`.
    - A recorded voice works too: drop in `voice.wav` and make `words.json` with any speech-to-text with word times.
    - Hand-fix the word timings. Everything is timed to words.json.
-4. **Shot plan** in `story.ts`: copy `templates/bridge/` (the final bridge source, same as `src/videos/bridge/` of your Remotion project) to `src/videos/<name>/`, register a new composition next to `BridgeShort` in `src/Root.tsx`, and rename it.
+4. **Shot plan** in `story.ts`: copy `templates/bridge/` plus the `templates/fx/` tools you use into `studio/src/videos/<name>/`. Register the short by adding `composition.ts` there: `export default { id: "<Name>Short", component, durationInFrames }`. `studio/src/index.ts` discovers every `src/videos/*/composition.ts` on its own, so never edit it per project.
+   - Project folders are git-ignored (`studio/src/videos/`, like `projects/`): anything only one short needs stays local. Anything reusable goes back into `templates/`.
    - `SHOTS`: id, a/b frames, light day/golden, crowd mode, `tau` story time.
-   - `XFADE`: crossfades at place/time changes.
-   - `FLASH_AT`: a white flash after the hook.
-   - `CAMS`: per-shot keys `{f, dur?, cut?, s: f => {pos, look, fov, roll}}`.
-   - `KICKS`: impact flip-shakes.
+   - `TRANS`: how each shot is entered (`templates/fx/transitions.ts`): whip, push, match, flash or cut. See **Camera motion and transitions**.
+   - `CAMS`: per-shot keys `{f, dur?, cut?, ease?, s: f => {pos, look, fov, roll}}`, evaluated by `camPath` (`templates/fx/camera.ts`).
+   - `SHAKES`: impact kicks and rumbles on their own layer (`camera.ts`), never baked into `CAMS`.
    - `DOF`/`dofAt`: lens blur per beat.
    - `FOREGROUND`: near framing props.
    - Every visual reaction lands 0-3 frames before its word.
@@ -137,10 +137,12 @@ lighting 5-6, ink 6, textures 5-6, characters 7, depth 6-7, composition 6-7 (fro
   - Fog = horizon colour, 25→420 m day, 20→360 m golden.
   - Bloom only on HDR emissives: threshold 1.0.
 - **Camera:**
-  - Hard cuts on big jumps. Everything else is a smootherstep glide of 18-40 f, peak ≤ 25 px/f at 720p.
+  - Every move is a springy glide of 18-40 f: a soft start, then a soft landing with a small overshoot and settle (~1.5 %); no glide may jump more than its neighbours in its first frames. Peak ≤ 25 px/f at 720p.
   - Every hold pushes in 0.15-0.35 %/f, with 0.6 %/f on punch words.
   - Rolls of 4-5°.
-  - No hand-held float. Impact shakes flip sign every frame and decay over 7 f.
+  - A gentle hand-held float runs on every shot (`ambient.ts`).
+  - Shakes are smooth damped kicks and rumbles on their own layer. The old flip-every-frame kicks are retired.
+  - Place changes use seamless transitions, not bare cuts. See **Camera motion and transitions**.
 - **Characters:**
   - About 3.5 head-heights tall, legs 1.4 HH.
   - Stick limbs about 0.055 of head width, ink-dot hands.
@@ -237,6 +239,153 @@ No sample frame shows bare ground or a bare wall. Before stills, every set must 
 - **Ambient life (moves, never bounces):** a few birds gliding/flapping in outdoor skies (`Birds`, anchored once per shot ~70 m ahead, 26 m up), drifting leaves in tree or autumn shots (`leaves`), chimney smoke (`smoke`), glowing dust motes in indoor sunbeams (`motes`). Flags and cloth wave.
 - **Crowds:** when a scene implies people (a council, a town, a schoolyard, an army), fill the back with extras that breathe and blink.
 - **Checks on stills:** dressing must never sit between the lens and a face. Keep plants and props out of the desk/subject line, since a plant behind a desk reads as a lump on the desk. Small stacked boxes on a table read as toy bricks, so use papers instead. Keep dressing off the subject's silhouette, and keep poles out of the frame centre.
+
+## Framing and focus (subject-aware camera; `templates/fx/frame.ts`)
+Two faults showed up in the renders: the lens blur sometimes softened the main subject, because focus sat on the camera's look point rather than on the subject; and subjects at the edge of the 9:16 frame were cut off. Every short now uses both fixes below.
+- **Auto-framing:** each frame, `frameCorrection(cam, subjectsOf(stage.places))` measures every main subject's card on screen and returns the correction. Main subjects are those 1.2–16 m away, at least 12 % on screen and not taller than the frame. The correction dollies back (up to 1.8x) and turns the camera until every main subject sits in the safe area: |x| ≤ 0.86, y from −0.94 to 0.88 in NDC (normalized screen coordinates, −1 to 1).
+  - world.ts averages the corrections over ±8 frames of the same shot, so the camera never twitches when someone walks in.
+  - Put deliberate inserts and over-the-shoulder close-ups in `NOFRAME`.
+- **Autofocus with a blur cap:** `subjectFocus()` puts the focus plane on the main subject: the biggest one near the centre, blended toward the whole group.
+  - It also caps `cInf` (the blur strength) so no main subject's blur exceeds 1.2 px. The background still melts.
+  - Focus is averaged over ±6 frames, so it never pops.
+  - The composition uses `world.lens.depth` and `min(dofAt.cInf, world.lens.cap)`. A shot's `focus()` in `DOF` still overrides.
+- **Still write good cameras.** A 9:16 frame at a 42° vertical FOV is only about ±12° wide. Put the group's centre on the look point. Allow about 2.5 m of camera distance per metre of group width.
+- **Check on stills:** no face or body cut at an edge unless the shot is listed in `NOFRAME`, and every subject is sharp.
+
+## Volumetric light (measured from `audio-sample/`; `templates/fx/volumetric.ts`)
+The samples show golden streaks fanning from the sun past roofs and trees, warm beams slanting through gaps with dust in them, and soft cones under lamps.
+- **`GodRaysEffect`** is a screen-space post pass. Put it right after the ink pass and before the lens blur, so the rays blur with the depth of field.
+  - It marches each pixel toward the sun's screen position and gathers only sky pixels (a depth test). Every roof, dome, tree and character therefore cuts a dark gap in the rays.
+  - Call `rays.aim(cam, world.sunNow, RAYS[light])` every frame. Rays fade as the sun leaves the frame or goes behind the camera.
+  - Presets: `golden` is strong, warm and long; `day` is faint and short; `off` is for storms and interiors.
+- **`volumeShaft(from, to)`** builds a beam from fanned planes with a streaked texture. Its edges and edge-on views fade, so no plane lines show. The texture drifts slowly; call `update(t)`.
+  - Use it for windows, roof gaps and doors. Add `motes()` (dressing.ts) inside the beam.
+- **`SunShafts(points)`** aims beams at chosen ground points (gaps between trees, a courtyard). They re-aim at the per-shot sun every frame via `place(sunDir, t, k)`.
+- **`lampCone(pos, dir)`** gives a soft cone under lamps, street lights and headlights.
+- **Keep it subtle.** World beams use strength 0.07–0.12, about 10–25 % brighter where they cross the subject. Never wash out a face. Check on stills that they stay off faces and that the sky streaks follow the real occluders.
+
+## Living backgrounds (measured from `audio-sample/` frames 0.2 s apart; `templates/fx/ambient.ts`)
+In the samples nothing in the frame is ever fully still, and nothing in the background bounces. All background motion is smooth.
+- **Wind:** `windify(root)` bends grass tufts, flowers, bushes, pine crowns and bamboo with slow gusts that roll across the field. It matches materials by name; build.ts `lam` sets `material.name = key`.
+  - Set `WIND.t.value = t` every frame; a storm uses about 2x the time rate.
+  - ink.ts bends its normal pass with the same `WIND_GLSL`, so outlines stay on the moving leaves.
+- **Camera float:** add `floatCam(t)` after the framing correction. It drifts a few centimetres, like a hand-held camera. Use half strength on inserts.
+- **Hung things sway:** add lanterns, signs, curtains and chimes to a `Swayer` with the pivot at the hook. Typical amp is 0.06–0.1 rad at 0.5–0.8 Hz; storms go faster.
+- **Lights breathe:** scale lamp glows by `flicker(t, seed, 0.08–0.1)` for paper lanterns and candles, or 0.02 for electric light.
+- **Sky:** clouds drift with `cloudDrift(t)`, faster in a storm. Birds come from dressing.ts `Birds`.
+- **Smoke and steam:** `smoke()` from chimneys and hearths, drifting downwind.
+- **Background people:** extras walk closed loops with `loopWalk(t, path, speed, offset)` in the stroll cycle.
+  - Keep them more than 10 m behind the action, and out of close-ups and storms.
+  - Exclude them from auto-framing (filter their keys) so they never steer the camera.
+- **Checks on stills:**
+  - Compare three frames 0.25 s apart: grass, lanterns, clouds and extras must have moved a little, and no main subject should be disturbed.
+  - Nothing in the background pops or bounces.
+
+## Camera motion and transitions (`templates/fx/camera.ts`, `templates/fx/transitions.ts`)
+In the samples the camera feels like it sits on a soft spring arm. It eases into a move and lands with a small overshoot. Shakes never knock the framing off: when a shake ends, the shot is exactly as composed. And the camera is already moving when it leaves a place and still moving when it arrives.
+- **Fixed layer order every frame**, in world.ts. Never fold one layer into another.
+  1. **Path:** `camPath(CAMS[id], f)`. Glides use `springEase`: a smootherstep body (zero velocity AND acceleration at the start: a raw spring response jolted on the first frame) plus a ~1.5 % overshoot-and-settle bump over the last 45 %. The look leads the body only a touch. Use `ease: "smooth"` for slow aerial reveals.
+  2. **Framing:** `frame.ts`, computed on the unshaken path pose, through a `Track`.
+     - The correction is sampled on a fixed 6-frame grid of the shot, blurred with a gaussian over ±3 grid points, then spline-interpolated, so it is C1-smooth.
+     - `subjectsOf` ignores the bounce (hop `dy`, squash `sx`/`sy`). The camera frames where a character stands and never chases hops or squashes. Chasing them caused the frame-to-frame jitter in the hook, the hammering and the plaza.
+     - Autofocus depth uses a `Track` too, so focus never breathes.
+  3. **Cut motion:** `cutMotion(id, f, SHOTS, TRANS)`.
+  4. **Float:** `floatCam`.
+  5. **Shake:** `applyShake(cam, shakeAt(t, SHAKES), shakeYield(speed, turn))`, last and in camera-local axes.
+     - The shake yields while the camera path itself moves: full strength on holds, about 45 % at 1 m/s or 0.5 rad/s, about 25 % inside a whip.
+     - Measure speed and turn from the path (`pathMotion`) plus the cut motion, never from the shaken pose. Moves and shakes then never fight.
+- **Shake events:**
+  - `kick`: a 2-frame attack, one firm jolt and a single soft rebound (2.6 Hz, damping 8.5). Use amp 0.4 for a landing, 0.6 for a crack, 0.8 for a big slam. A camera that keeps ringing reads as jitter.
+  - `rumble`: smooth band-limited noise capped at 4 Hz, with a smoothstep ramp of 0.35 s in and 0.6 s out. Use it for quakes, engines and stampedes.
+  - At 30 fps anything above ~4 Hz reads as stutter, not shake. Keep peak rotation ≤ 0.7° (rumble) and ≤ 0.65° (kick at amp 1).
+  - Never use random per-frame jitter. Reuse the same time window for cast reactions and dust (`rumbleAt`).
+- **Transitions** (`TRANS[shotId]` = how that shot is entered):
+  - `whip` (8-10 f), between places. The camera swing spans exactly the blur window (dur/2 each side); a swing outside the blur reads as a jerk: the outgoing camera accelerates into a pan, the frame smears with directional SVG blur along the pan (slide ≤ 8 % with a 1.24x scale, so the frame edge never shows the empty backdrop), and the incoming camera lands from the same pan direction and settles.
+  - `push` (10-16 f), into a new place or time: the camera pushes through the outgoing frame (zoom plus soft blur) while the new scene dissolves in from slightly back.
+  - `match` (8-12 f): a dissolve where both frames drift the same way. Use it inside a place or for a weather change.
+  - `flash` (4 f): a white flash for shocks and time jumps.
+  - `cut`: only where the abruptness is the point (the quake), or between two close angles of one place that both keep creeping.
+  - Alternate whip directions with the story's flow: left-to-right for forward progress, upward into a reveal.
+- **The composition** stacks the outgoing and incoming shot canvases from `layersAt(f, SHOTS, TRANS)`. Each layer gets a CSS translate/scale and an SVG `feGaussianBlur` with separate x/y deviation for the smear. The outgoing shot renders past its own end, so its camera path must stay valid for a few frames beyond `b`.
+- **Speed check:** a glide that crosses a lot of ground must be long enough. Keep the background under ~25 px/f at 720p (~35 px/f at 1080), which is about 1 m of camera travel per 6 frames at 5 m distance. A 6 m move needs about 40 f. Faster pans strobe at 30 fps and read as jitter. A big TURN at close range, such as swinging from one subject to another 10 m apart, can't be slowed enough: split it into two shots joined by a `whip` (the nails short, builders to Kenji). Start long moves a few frames before the word they land on.
+- **Jitter check:** render 8 consecutive frames of every shot with characters, then compare the background band frame to frame (phase correlation). Shifts must be monotonic (the creep), never back-and-forth. Flying debris can fool the measure, so confirm visually.
+- **Checks on stills:** render the 2 frames before, the cut frame and 2 frames after every transition. Look for: no pop, the motion continuing in the same direction, faces back in sharp focus within 6 f, and shakes that end with the framing intact.
+
+## Depth lighting (`templates/fx/depthlight.ts`)
+The samples read in clear depth layers: the near subject is crisp and contrasty, and every step back is lighter, cooler, less saturated and hazier. In backlit golden frames the haze glows warm toward the sun.
+- `DepthLightEffect` is one depth-buffer pass placed right after the ink pass, before god rays and lens blur. It applies:
+  - aerial perspective (`density`);
+  - low ground mist that thins with world height (`mist`, `mistH`);
+  - distance desaturation;
+  - forward scatter toward the sun;
+  - depth contact shading (`ao`): only real creases and contacts darken. It uses a 0.12 m radius and is range-checked, so only neighbours 2–50 cm nearer count. A character standing 1–3 m in front of the ground never leaves a dark ghost outline behind it;
+  - a subtle light rim (`rim`): a brightening of at most ~7 %, never added white, only on edges standing well in front of a far surface. It fades in past ~5 m, so close characters never get a halo; their thick ink already separates them.
+- Call `fx.depth.set(cam, sunDir, DEPTH_LIGHT[preset])` every frame. Presets: `day`, `golden`, `storm` and `interior` (no haze, contact shading only).
+- Match `haze` to the horizon sky colour of that light, and keep the scene's three.js fog for the very far range.
+- **Checks on stills:** the mid-ground is clearly lighter than the foreground, the far hills are clearly lighter again, faces never look washed out, and close characters show no visible rim at all.
+
+## Character shadows
+- Every standing card gets a contact pool right under the feet, plus by day a soft tail away from the sun (`blob()` in cast.ts).
+- The blobs sit at +3.5 / +4 cm with polygon offset −6. Lanes, yards and other ground decals use offset −2 at +1.5–2 cm, so the shadow always wins the depth test. A blob hidden under a ground plane looks like the character is floating.
+- **Check on stills:** a visible dark pool under every pair of feet on every ground type (grass, lane, yard, stone).
+
+## Reference design guide (studied frame by frame from `audio-sample/`, 5 shorts)
+Use this as the target for every new character, prop and set. The code lives in `templates/bridge/toon.ts` (characters) and `templates/fx/` (world tools).
+
+### Characters (2D ink cards standing in the 3D world)
+- **Head:**
+  - Very large, near-circular, paper white (`SKIN` #fbfaf6, near-white `SKINS` for crowds). Skin tones (`SKIN_TONES`) are a deliberate exception, never the default.
+  - The head is about as wide as the torso or wider, and about 40 % of the figure height.
+  - It has one thick plum ink outline (thick-thin, heavier on the shadow side) and a soft grey shading crescent on the side away from the light.
+- **Face:**
+  - No nose, no ears, no blush.
+  - The default eyes are the unimpressed lidded pair: a flat lid line with a half-disc pupil under it.
+  - Surprise and curiosity switch to big round white eyes with a dot pupil, which read like glasses.
+  - Brows are short, thick, rounded dark bars, and they carry the emotion: angle them, don't redraw the eyes.
+  - The mouth is a small line, a "D" with teeth, or an "o".
+  - Moustaches are big soft brown blobs.
+  - The face sits low on the head when a hat is worn.
+- **Hair:** a simple brown cap shape. Under a hat, show only a soft patch at the back or side (`hairSide`).
+- **Hats are the character's identity:**
+  - Drawn shaded, with a highlight and a darker band: bowler (glossy dome, specular streak), striped engineer cap with a top button, police or conductor cap (gold cord, badge), helmet with plume, top hat, headband.
+  - Use `hat: "bowler" | "engineer" | "police" | "kepi" | "tophat" | "cap" | "headband" | "bonnet" | ...`.
+- **Body:**
+  - A bean or egg torso in the outfit colour, shaded with a side gradient.
+  - Clothing is NEVER plain:
+    - give every main character a `pattern` (stripes, plaid, dots, studs for armour) or at least 2 `details` (pockets, suspenders, bandana, gold watch chain, collar + tie);
+    - give crowds a mix of plaid, stripes and dots so they read as many different people.
+  - Buttons are ink-ringed dots.
+- **Limbs:** single thin dark strokes. Hands are ink dots, feet small dark ovals. Legs run about 35 % of the height. Arms come from the shoulder line and bend with one elbow curve.
+- **Props in hand:** chunky and shaded with a highlight (cane with a gold knob, mallet, hammer, newspaper, tray).
+- **Variants:** a statue or bronze version is the same drawing with a metal tint and specular. A crowd is the same rig with varied hats, patterns and glasses.
+
+### Backgrounds (two looks, both in the samples)
+- **Cel-shaded diorama** (*Town Built Around a Button*):
+  - Clean simple geometry with bold dark outlines on objects.
+  - Flat saturated colours with soft gradients.
+  - Rows of identical cute houses with lit windows, warm lamp posts and a strong circular layout.
+  - Use `SAMPLE_INK` with stronger `strength` and fewer, larger shapes.
+- **Painterly 3D world** (*Cart*, *Railroads*, *Instinct*):
+  - Textured stone, brick, planks and gravel with visible individual pieces.
+  - Dense grass blades, painterly saturated skies with big soft clouds, and dramatic sun glare and god rays.
+  - Use dressing.ts ground cover at high density, plus volumetric.ts and depthlight.ts.
+- **Both looks share:**
+  - No empty ground: every frame has foreground props or ground cover and a mid-ground of set pieces.
+  - Signage and banners: pictograms only (our rule: no text in the world).
+  - Warm practical lights: lanterns, lamps, windows.
+  - Lens: a wide angle (fov 45–60) from low angles. Rails and walls converge dramatically, and characters stand big in the foreground, cropped at the knees or waist in medium shots.
+
+### Objects and props
+- Chunky, slightly oversized and simplified, with bevelled or rounded edges. Hero props get a gloss highlight (`glossy()`, `brass()`) and, in the diorama look, a bold outline.
+- Story props get exaggerated detail where the joke is: a grid of holes, a radiating fan of arrows, a glowing button under a glass dome. Inserts frame the prop to fill 60–80 % of the screen.
+- Materials: wood with grain, stone with mortar, metal with a specular streak, cloth with a pattern. No untextured grey boxes on screen.
+
+### Checks on stills (compare side by side with `references/frames/` or fresh sample frames)
+- Heads are white.
+- Every main character shows a pattern or 2+ details and a distinctive hat or hair.
+- Faces use lidded or round eyes with bar brows.
+- The ground is covered.
+- The hero prop is glossy and chunky.
 
 ## Look-match loop (how the bridge look was reached; reuse for any "make it look like X" pass)
 1. **Measure the reference first.** One analysis agent per topic (motion, depth, textures, characters, lighting, outlines, grade), each writing numbers, not adjectives, to `references/reports/<topic>.md`. Shared brief: `compare/CONTEXT.md`. Reports are the source of truth for every agent after.

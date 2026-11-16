@@ -222,11 +222,11 @@ const blob = (out: Stage, x: number, y: number, z: number, sc = 1, k = 1) => {
     const el = Math.asin(Math.min(0.99, Math.max(0.1, SUN.y)));
     const len = Math.min(2.4, Math.max(0.5, 1.6 / Math.tan(el))) * sc, h = len + 0.55 * sc, c = 0.3 * h; // feet at v = .2 of the card
     const tc = hexOf(TAIL, k);
-    out.fx.push({ key: `blob|shadow|${tc}`, cw: 128, ch: 256, draw: (p) => fxShadow(p, tc), x: x + ox * c, y: y + 0.018, z: z + oz * c,
+    out.fx.push({ key: `blob|shadow|${tc}`, cw: 128, ch: 256, draw: (p) => fxShadow(p, tc), x: x + ox * c, y: y + 0.035, z: z + oz * c,
       w: 0.72 * sc, h, flat: true, rot });
   }
   const cc = hexOf(CONTACT[LNAME], k);
-  out.fx.push({ key: `blob|contact|${cc}`, cw: 128, ch: 128, draw: (p) => fxContact(p, cc), x: x + ox * 0.03 * sc, y: y + 0.022, z: z + oz * 0.03 * sc,
+  out.fx.push({ key: `blob|contact|${cc}`, cw: 128, ch: 128, draw: (p) => fxContact(p, cc), x: x + ox * 0.03 * sc, y: y + 0.04, z: z + oz * 0.03 * sc,
     w: 0.52 * sc, h: 0.4 * sc, flat: true, rot });
 };
 

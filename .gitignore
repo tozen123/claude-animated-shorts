@@ -8,3 +8,8 @@ studio/node_modules/
 studio/out/
 # your own shorts (scripts, voices, sound, renders) stay local
 projects/
+# per-short studio code (each short's world / cast / story / composition): project-specific, stays local.
+# Shared, reusable code lives in templates/ (copied into a new studio/src/videos/<name>/ per SKILL.md).
+studio/src/videos/
+# project-specific helper scripts (road short shot list)
+studio/scripts/shotframes.py

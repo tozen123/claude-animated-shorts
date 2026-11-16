@@ -81,5 +81,6 @@ export function cardShade(m: THREE.MeshLambertMaterial) {
 export const blobMaterial = (map: THREE.Texture) => new THREE.MeshBasicMaterial({
   map, transparent: false, depthWrite: false, fog: false, toneMapped: false,
   blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
-  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide,
+  // must beat the ground planes (lanes / yards use offset -2): a blob hidden under them looks like no shadow
+  polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, side: THREE.DoubleSide,
 });

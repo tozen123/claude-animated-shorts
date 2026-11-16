@@ -24,6 +24,7 @@ export const lam = (key: string, make: () => THREE.MeshLambertMaterialParameters
       CHAIN_MATS.add(c);
       m = c as unknown as THREE.MeshLambertMaterial;
     } else m = twoTone(new THREE.MeshLambertMaterial(make()));
+    m.name = key;
     mats.set(key, m);
   }
   return m;

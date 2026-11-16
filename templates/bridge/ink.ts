@@ -23,6 +23,7 @@
 // Verified in a toy scene with this exact stack (MSAA 4, HalfFloat, DOF/Bloom/Neutral): compiles, no GL errors,
 // measured EW 3.7 / 3.2 / 2.6 / 1.5 / 1.1 px at 3 / 12 / 25 / 90 / 200 m (silhouettes) and 2.3 -> 0.9 px (creases).
 import * as THREE from "three";
+import { WIND, WIND_GLSL } from "./ambient";
 import { Pass } from "postprocessing";
 
 /** Layer for things that must never be outlined (camera-facing sprites, sky, clouds, smoke). */
@@ -61,9 +62,13 @@ void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
 // world-only normal pass (scene.overrideMaterial); works for Mesh and InstancedMesh. Cut-out materials
 // (map + alphaTest, e.g. the sign board, the church clock) keep their shape: see onBeforeRender in the constructor.
+const ZERO2 = new THREE.Vector2();
 const NORMAL_VERT = /* glsl */ `
 #include <common>
 uniform mat3 cutUv;
+uniform vec2 uWind;
+uniform float uWindT;
+${WIND_GLSL}
 varying vec3 vN;
 varying vec3 vV;
 varying vec2 vCut;
@@ -73,6 +78,7 @@ void main() {
   vN = transformedNormal;
   vCut = (cutUv * vec3(uv, 1.0)).xy;
   #include <begin_vertex>
+  transformed += windOffset((modelMatrix * vec4(transformed, 1.0)).xyz, uWind, uWindT);
   #include <project_vertex>
   vV = mvPosition.xyz;
 }`;
@@ -260,7 +266,7 @@ export class InkPass extends Pass {
 
     this.normalMat = new THREE.ShaderMaterial({
       vertexShader: NORMAL_VERT, fragmentShader: NORMAL_FRAG, side: THREE.DoubleSide,
-      uniforms: { tCut: { value: null }, cut: { value: 0 }, cutUv: { value: new THREE.Matrix3() } },
+      uniforms: { tCut: { value: null }, cut: { value: 0 }, cutUv: { value: new THREE.Matrix3() }, uWind: { value: new THREE.Vector2() }, uWindT: WIND.t },
     });
     // per object: copy the original material's cut-out (map + alphaTest) so alpha-tested world planes keep their shape
     this.normalMat.onBeforeRender = (_r, _s, _c, _g, object, group) => {
@@ -270,6 +276,7 @@ export class InkPass extends Pass {
       const u = this.normalMat.uniforms;
       const map = src && src.alphaTest > 0 ? src.map : null;
       u.tCut.value = map; u.cut.value = map ? src.alphaTest : 0;
+      (u.uWind.value as THREE.Vector2).copy(src?.userData?.wind ?? ZERO2);
       if (map) { map.updateMatrix(); (u.cutUv.value as THREE.Matrix3).copy(map.matrix); }
       this.normalMat.uniformsNeedUpdate = true;
     };

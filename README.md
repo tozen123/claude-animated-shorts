@@ -18,6 +18,12 @@ Proven on **The Bridge That Fell for a Song**, a 67 s short about the 1831 Broug
 | `templates/fx/particles.ts` | Deterministic particles: sparks, embers, impact dust + debris, anger bolts, glowing eyes, rain, lightning, sparkles, sweat, shock lines |
 | `templates/fx/reactions.ts` | Expression-change reactions: face switch + body squash/hop + matching effect (glowing furious eyes, bolts, sweat, sparkles, shock lines) |
 | `templates/fx/dressing.ts` | Scene dressing and ambient life: grass tufts, flowers, gravel, rocks, bushes, fences, telegraph poles, props, furnished rooms (wainscot, pictures, bookcases, rugs, plants, clocks, curtains, desk clutter), birds, leaves, smoke, dust motes |
+| `templates/fx/frame.ts` | Subject-aware camera: auto-framing keeps main subjects inside the 9:16 safe area; autofocus on the main subject with a blur cap so subjects are never blurred |
+| `templates/fx/volumetric.ts` | Volumetric light: screen-space god rays from the sun (occluded by roofs and trees), soft drifting light-shaft volumes, sunbeams aimed per shot, lamp cones |
+| `templates/fx/ambient.ts` | Living backgrounds: wind in grass, bushes and trees (outlines follow it), hand-held camera float, swaying hung lanterns and signs, breathing lights, drifting clouds, background people walking loops |
+| `templates/fx/camera.ts` | Springy camera paths (soft start, small overshoot and settle) and a separate shake layer (damped kicks, smooth rumbles) that never disturbs the framing |
+| `templates/fx/transitions.ts` | Seamless shot transitions: whip pans with directional motion blur, push-throughs, match dissolves, flashes, with the matching camera motion on both sides of the cut |
+| `templates/fx/depthlight.ts` | Depth lighting post pass: aerial perspective, ground mist, distance desaturation, warm sun scatter, depth contact shading and light rims |
 | `projects/<name>/` | One folder per short: `SCRIPT.md`, `voice/`, `audio/` |
 | `studio/` | The Remotion project the shorts render in (`src/videos/<name>/`); `npm install` once |
 | `templates/audio/` | The synthesized sound: SFX, march music, the mix with ducking and loudness |
