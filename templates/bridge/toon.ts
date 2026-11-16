@@ -469,6 +469,16 @@ const hatOn = (p: Pen, o: Outfit, hp: P2[], H: Blob, cx: number, hc: number, lig
       const [bx, by] = R([[cx, yb - 0.62 * ht]])[0];
       p.poly([[bx, by - 7 * u], [bx + 6 * u, by - 2 * u], [bx + 4 * u, by + 6 * u], [bx - 4 * u, by + 6 * u], [bx - 6 * u, by - 2 * u]], "#e8c45a", 1.6 * u);
     }
+  } else if (o.hat === "cowboy") {
+    // western hat: a wide brim with the sides curled up, a tall crown pinched with a centre dent, a dark band
+    const col = o.cap ?? "#8a5a34", yb = crown + 0.26 * HH, ht = 0.36 * HH, wb = 36 * u, wt = 31 * u;
+    const brim: P2[] = [];
+    for (let i = 0; i <= 36; i++) { const t = (Math.PI * 2 * i) / 36, x = Math.cos(t); brim.push([cx + 80 * u * x, yb + 0.075 * HH * Math.sin(t) - 12 * u * x * x]); }
+    p.shadedFill(R(brim), shade(col, 0.92), mul(col, SH_FELT), light, 80 * u, 0.4); p.poly(R(brim), null, ow);
+    const body = R([[cx - wb, yb], [cx - wt, yb - ht], [cx - 9 * u, yb - ht + 5 * u], [cx, yb - ht + 10 * u], [cx + 9 * u, yb - ht + 5 * u], [cx + wt, yb - ht], [cx + wb, yb]]);
+    p.shadedFill(body, col, mul(col, SH_FELT), light, wb, 0.4);
+    p.clip(body, () => p.band(R([[cx - wb - 4 * u, yb - 0.06 * HH], [cx + wb + 4 * u, yb - 0.06 * HH]]), shade(col, 0.45), 0.08 * HH, 0.8 * u));
+    p.poly(body, null, ow);
   } else if (o.hat === "tophat") {
     const yb = crown + 0.22 * HH, ht = 0.8 * HH, wb = 0.31 * W, wt = 0.33 * W, col = "#2e2a36";
     const body = R([...sag(yb, wb).reverse(), [cx - wt, yb - ht], [cx + wt, yb - ht]]);
@@ -489,7 +499,7 @@ const hatOn = (p: Pen, o: Outfit, hp: P2[], H: Blob, cx: number, hc: number, lig
 // ---------------- bodies ----------------
 export type Arms = [P2[], P2[]];
 /** held prop; for the hammer the number is the strike 0 (raised) .. 1 (struck) */
-export type Prop = null | "icecream" | "shako" | "bowl" | ["hammer", number] | ["mallet", number] | ["scissors", number];
+export type Prop = null | "icecream" | "shako" | "bowl" | ["hammer", number] | ["mallet", number] | ["pick", number] | ["scissors", number];
 
 const BUILD: Record<Build, { a: number; torso: number; legs: number; tw: number }> = {
   adult: { a: 118, torso: 1.1, legs: 1.4, tw: 0.8 },
@@ -678,7 +688,8 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
       const ang = rad(-70 + 105 * clamp(prop[1], 0, 1));
       const Rh = (pts: P2[]) => rotPts(pts, ang, hx, hy);
       p.band(Rh([[hx, hy + 12 * u], [hx, hy - 44 * u]]), "#8a5a34", 5 * u, 1.5 * u, "round");
-      if (prop[0] === "mallet") p.poly(Rh([[hx - 22 * u, hy - 66 * u], [hx + 24 * u, hy - 66 * u], [hx + 24 * u, hy - 38 * u], [hx - 22 * u, hy - 38 * u]]), "#d8a868", 2.4 * u);
+      if (prop[0] === "pick") p.poly(Rh([[hx - 30 * u, hy - 46 * u], [hx, hy - 58 * u], [hx + 30 * u, hy - 46 * u], [hx + 27 * u, hy - 42 * u], [hx, hy - 51 * u], [hx - 27 * u, hy - 42 * u]]), "#8d949c", 2.2 * u);
+      else if (prop[0] === "mallet") p.poly(Rh([[hx - 22 * u, hy - 66 * u], [hx + 24 * u, hy - 66 * u], [hx + 24 * u, hy - 38 * u], [hx - 22 * u, hy - 38 * u]]), "#d8a868", 2.4 * u);
       else p.poly(Rh([[hx - 12 * u, hy - 58 * u], [hx + 20 * u, hy - 58 * u], [hx + 20 * u, hy - 42 * u], [hx - 12 * u, hy - 42 * u]]), "#7d848c", 2.2 * u);
       p.dot(hx, hy, 5.5 * u);
     }

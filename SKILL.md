@@ -121,7 +121,7 @@ lighting 5-6, ink 6, textures 5-6, characters 7, depth 6-7, composition 6-7 (fro
   map → grade; MSAA 4. Film grain exists but is OFF (reference measures no grain; it quadruples the file size).
 - **Characters** (`toon.ts`/`cast.ts`/`cardshade.ts`): bean heads h/w .94, plum ink #241726, eyes .26 W apart, no blush,
   14 expressions; adults 3.5 head-heights; walk bob 5 %, lean 1-7°, planted 0.8 m stride; blinks 0.5-2.3 s; tight
-  contact shadow ~.5 under the feet + sun-direction tail by day; golden rim inner only (never an offset outer copy).
+  contact shadow ~.5 under the feet + a REAL silhouette sun shadow (see Character shadows); golden rim inner only.
 - **Camera** (`story.ts`): cuts on big jumps, smootherstep glides 18-40 f, every hold creeps (no static hold ≥4 f),
   flip kicks decaying over 7 f on impacts, 4-4.6° rolls, foreground props (`FOREGROUND`) in ~1/3 of shots.
 
@@ -308,6 +308,7 @@ In the samples the camera feels like it sits on a soft spring arm. It eases into
   - Alternate whip directions with the story's flow: left-to-right for forward progress, upward into a reveal.
 - **The composition** stacks the outgoing and incoming shot canvases from `layersAt(f, SHOTS, TRANS)`. Each layer gets a CSS translate/scale and an SVG `feGaussianBlur` with separate x/y deviation for the smear. The outgoing shot renders past its own end, so its camera path must stay valid for a few frames beyond `b`.
 - **Speed check:** a glide that crosses a lot of ground must be long enough. Keep the background under ~25 px/f at 720p (~35 px/f at 1080), which is about 1 m of camera travel per 6 frames at 5 m distance. A 6 m move needs about 40 f. Faster pans strobe at 30 fps and read as jitter. A big TURN at close range, such as swinging from one subject to another 10 m apart, can't be slowed enough: split it into two shots joined by a `whip` (the nails short, builders to Kenji). Start long moves a few frames before the word they land on.
+- **Layer check (before every render):** world.ts `update()` must call all five layers: `camPath`/`camAt`, `FR.applyCorrection`, `cutMotion`, `floatCam` and `applyShake`. Check with `grep -c "cutMotion(id, f,\|floatCam(\|applyShake(" world.ts` (expect ≥ 3). A patch that replaces the framing block once silently dropped the cut motion, float and shakes, and only the picture-side blur remained.
 - **Jitter check:** render 8 consecutive frames of every shot with characters, then compare the background band frame to frame (phase correlation). Shifts must be monotonic (the creep), never back-and-forth. Flying debris can fool the measure, so confirm visually.
 - **Checks on stills:** render the 2 frames before, the cut frame and 2 frames after every transition. Look for: no pop, the motion continuing in the same direction, faces back in sharp focus within 6 f, and shakes that end with the framing intact.
 
@@ -325,9 +326,29 @@ The samples read in clear depth layers: the near subject is crisp and contrasty,
 - **Checks on stills:** the mid-ground is clearly lighter than the foreground, the far hills are clearly lighter again, faces never look washed out, and close characters show no visible rim at all.
 
 ## Character shadows
-- Every standing card gets a contact pool right under the feet, plus by day a soft tail away from the sun (`blob()` in cast.ts).
-- The blobs sit at +3.5 / +4 cm with polygon offset −6. Lanes, yards and other ground decals use offset −2 at +1.5–2 cm, so the shadow always wins the depth test. A blob hidden under a ground plane looks like the character is floating.
-- **Check on stills:** a visible dark pool under every pair of feet on every ground type (grass, lane, yard, stone).
+Every character casts a real, drawing-shaped sun shadow and stands on a contact pool. A painted tail or a camera-facing
+card's own shadow is wrong (seen from the side a card casts a thin line, and a tail never lands on walls or steps).
+- **Silhouette caster** (`Actor.caster` in cast.ts): a copy of the card at the same place, size, hop and lean, turned to
+  FACE THE SUN every frame (`castFrom(sunDir)` in world.ts after posing the card). It draws nothing (`colorWrite` and
+  `depthWrite` off) and only feeds the shadow map. The visible card never casts (`castShadow = false`).
+  - The caster material must carry the drawing as `map` with `alphaTest: 0.5`, and be `DoubleSide`. three.js copies
+    map / alphaTest from the mesh material onto the shadow depth material (without them the shadow is the whole
+    rectangle), and it draws the FAR faces of one-sided casters (a front-only caster casts nothing).
+  - `bind()` sets the same texture on the card, its depth material and the caster.
+  - Hide the caster with the card (`hide()`), or unused pool actors keep casting.
+- **No self-shadow:** the card samples the shadow map 0.5 m toward the sun (`SUNW` uniform in cardshade.ts, set from
+  the sun direction every frame), so its own caster never darkens it, while buildings, props and other characters
+  still shade it.
+- **Contact** (`blob()`): a tight dark pool under the feet plus a wide faint occlusion pool. Both shrink and fade
+  while the character hops (the real shadow detaches on its own). The painted tail stays off (`PAINTED_TAIL`).
+- The blobs sit at floor + 3.5 / 4 cm with polygon offset −6. Lanes, yards and other ground decals use offset −2 at
+  +1.5–2 cm, so the shadow wins the depth test. **Interiors:** cards and blobs stand on the floor top (plank floors
+  are 6 cm thick: `G0`), never at y = 0, or the feet sink in and the blobs vanish under the boards.
+- **Checks on stills:**
+  - A shadow shaped like the character (head, hat, arms) falls away from the sun on the ground, walls and steps. A
+    rectangle means the caster lost its map or alphaTest; no shadow means it is one-sided or hidden.
+  - A dark pool sits under every pair of feet on every ground type.
+  - Nobody has a dark band across their own body.
 
 ## Reference design guide (studied frame by frame from `audio-sample/`, 5 shorts)
 Use this as the target for every new character, prop and set. The code lives in `templates/bridge/toon.ts` (characters) and `templates/fx/` (world tools).
@@ -380,6 +401,38 @@ Use this as the target for every new character, prop and set. The code lives in 
 - Story props get exaggerated detail where the joke is: a grid of holes, a radiating fan of arrows, a glowing button under a glass dome. Inserts frame the prop to fill 60–80 % of the screen.
 - Materials: wood with grain, stone with mortar, metal with a specular streak, cloth with a pattern. No untextured grey boxes on screen.
 
+### Buildings and street objects (`templates/fx/architecture.ts`)
+No building is a bare box. Build every house and shop with `house(b, matrix, spec)`, which adds the parts the samples
+always show. The parts are also what gives the ink pass its many small interior lines.
+- **Base and walls:** a stone plinth and a water-table board where the walls meet the ground. Corner boards proud of
+  the wall. Siding with readable courses: `clap`, `board` (board and batten), `log` or `plank` (`sidingTex`, with a
+  darker splash band at the foot). A frieze board under the eaves, and a belt course between floors.
+- **Windows** (`windowAt`): a casing, a deeper sill, a header cap, cross mullions, painted glass (sky above the room,
+  two white streaks), curtains inside. Add shutters with louvres or a flower box on homes.
+- **Doors** (`doorAt`): a casing, two raised panels (or a glass top), a brass knob, a transom on wide doors, and steps
+  down to the ground when there is no porch.
+- **Roofs:** slabs with thickness, a 0.45 m overhang, fascia and barge boards, a ridge cap, gable ends filled with
+  siding. A false front (western or shop street) is a tall flat front with a stepped crown, a cornice on brackets and
+  a framed sign. The roof behind it stops inside the front.
+- **Signs:** pictograms only (`Picto`: pick, shovel, loaf, bed, anvil, bottle, coin, tooth, boot), never words.
+- **Porch / boardwalk:** a deck, a step, posts with brackets, a railing with balusters (open at the door), and a
+  shingled shed roof or a striped awning with a scalloped valance. An upper balcony on brackets for 2-floor buildings.
+- **Chimney:** a stone stack on a wider firebox base, a cap, and a dark flue. `house()` returns its top (`smoke`) for
+  the smoke emitter, so smoke always leaves the real chimney.
+- **Clutter at its feet** (`clutter: n`): barrels with staves and hoops (`barrel2`), braced crates (`crate2`),
+  stacked crates. Add a trough, a hitching rail, a wagon, a water tower, a lamp post or a well where they fit
+  (`trough`, `hitch`, `wagon`, `waterTower`, `lampPost`, `well`).
+- **Ruins** (`ruin`): a broken stone footing with gaps, charred stub walls with uneven tops, leaning corner posts, a
+  fallen ridge beam, scattered blackened boards, an ash heap, a standing stone chimney with soot, and an iron stove.
+- **Landforms** (`butte`): a talus apron, a faceted body in 2-3 strata with ledges, and a lighter cap rock, never a
+  plain cylinder. Keep the road's vanishing point open: no butte straight down a road the camera looks along.
+- **Checks on stills:**
+  - At mid distance each facade shows at least 6 separate parts (plinth, corners, window casings, sills, door, sign,
+    porch posts).
+  - Glass reads as glass, not a flat colour.
+  - Roofs show their edge thickness.
+  - Nothing big and featureless (a hazed slab, a bare wall) fills more than a quarter of the frame.
+
 ### Checks on stills (compare side by side with `references/frames/` or fresh sample frames)
 - Heads are white.
 - Every main character shows a pattern or 2+ details and a distinctive hat or hair.
@@ -401,6 +454,7 @@ Use this as the target for every new character, prop and set. The code lives in 
 5. Contracts between owners live in exported constants (e.g. `NOINK` layer from ink.ts, `dofAt`/`FOREGROUND` from story.ts, `LIGHTS`/`LOOK` from lights.ts). Changing a contract means telling every owner that reads it.
 
 ## Gotchas
+- **Walker heading = the real motion.** Pass `walker()` the direction the character actually moves (the sign of dz when z falls over time). A wrong sign makes the card pick a side or back view, so a crowd running at the camera shows everyone side-on or walking backwards. Check one still mid-run: people coming toward the lens face front.
 - Kenney nature-kit materials are teal: recolour them by material name in build.ts.
 - Cameras end up inside houses: the sight-line culler in build.ts/world.ts removes anything blocking any camera ray.
 - Ink in the same merged effect pass as DOF gets overwritten. Ink must be its own pass before the blur.

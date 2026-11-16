@@ -8,6 +8,7 @@ import { Batch, Strand, boxGeo, V, lam, buildTown, flagTex, Kit, Ray, kitClone }
 import { beam, bed, rep, ctex, planksHD, beamHD, stoneHD, cobbleHD, grassHD, chainHD, waterNear, waterFar, cloudHD } from "./paint";
 import { Pen, fxSign } from "./toon";
 import { LIGHTS, LOOK, LightPreset } from "./lights";
+import { SUNW } from "./cardshade";
 import { TONE, CHAR, LFB, twoTone, untone } from "./shade";
 import { NOINK } from "./ink";
 import { Pool, Actor, Fx, stage, snapFx, splashFx, creakFx, SIGN_AT, SU_SWING } from "./cast";
@@ -356,6 +357,7 @@ export class World {
     cam.layers.enable(NOINK); // sky, clouds, smoke and sun sprites live on the no-ink layer but are still rendered
     // ---- light rig (lighting.md 9.4): camera-relative sun frozen per shot, two-tone uniforms, shadow fit ----
     const K = LOOK[s.light], sunDir = this.shotSun(id, s, L);
+    SUNW.value.copy(sunDir); // cards sample their shadow 0.5 m toward the sun (cardshade.ts)
     this.hemi.color.set(L.sky); this.hemi.groundColor.set(L.ground); this.hemi.intensity = L.hemiI;
     this.sun.color.set(L.sunCol); this.sun.intensity = L.sunI;
     let Rr = THREE.MathUtils.clamp(dist * 1.15 + 7, 12, 95);
@@ -432,10 +434,11 @@ export class World {
       a.mesh.rotation.set(0, p.yaw ?? Math.atan2(cam.position.x - p.x, cam.position.z - p.z), p.roll ?? 0);
       a.mesh.scale.set(p.mirror ? -sc2 : sc2, sc2, sc2);
       if (a.mat.emissiveMap) a.mat.emissive.set(tint); // legacy emissive card until the CHAR agent's cardShade lands
-      a.mesh.castShadow = p.geo === "swing" ? true : L.actorShadow; // day: soft contact blobs instead (CHAR agent)
+      a.mesh.castShadow = false; // the visible card never casts: its sun-facing silhouette caster does (cast.ts Actor.castFrom)
+      a.castFrom(sunDir);
       used.push(a);
     }
-    for (let i = ai; i < this.actors.length; i++) this.actors[i].mesh.visible = false;
+    for (let i = ai; i < this.actors.length; i++) this.actors[i].hide();
     if (!used.includes(this.swing)) this.swing.mesh.visible = false;
     let fi = 0;
     const fused: Fx[] = [];

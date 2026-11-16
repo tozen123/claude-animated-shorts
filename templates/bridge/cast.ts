@@ -62,6 +62,10 @@ export const SU = 0.00216; // metres per design unit: 1000 units = 2.16 m
 export const SU_SWING = 2.3 / 1830; // swing canvas: rope of 1830 units = 2.3 m
 const BODY = (() => { const g = new THREE.PlaneGeometry(600 * SU, 1000 * SU); g.translate(0, (975 - 500) * SU, 0); return g; })();
 const CARD = new THREE.PlaneGeometry(1, 1);
+/** the shadow caster draws nothing in the main pass (no colour, no depth): it only exists for the sun's shadow map.
+ *  It must carry the drawing + alphaTest itself: three copies map / alphaTest from the MESH material onto the depth
+ *  material (without them the shadow is the whole quad). DoubleSide: three draws the far faces of one-sided casters. */
+const casterMat = () => new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide, map: blank, alphaTest: 0.5 });
 /** world roots that hold actors (to find the scene's sun when world.ts does not pass it) */
 const ROOTS = new Set<THREE.Object3D>();
 
@@ -69,6 +73,10 @@ const ROOTS = new Set<THREE.Object3D>();
  *  when world.ts says so (golden). Drawn after the contact blobs (renderOrder 1). */
 export class Actor {
   mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial; dmat: THREE.MeshDepthMaterial; r: Req | null = null;
+  /** a copy of the card turned to FACE THE SUN that only casts: the shadow is the drawing's full silhouette, whatever
+   *  angle the camera sees the card from (a camera-facing card seen from the side casts a thin line). The shadow
+   *  lands on the ground, walls, steps, props and other characters in the same two-tone shade as the buildings'. */
+  caster: THREE.Mesh; cmat = casterMat();
   constructor(parent: THREE.Object3D, geo: THREE.BufferGeometry = BODY) {
     this.mat = cardShade(new THREE.MeshLambertMaterial({ map: blank, alphaTest: 0.5, side: THREE.DoubleSide }));
     this.mat.alphaToCoverage = false; // A2C + MSAA left 1 px sky-depth seams on blurred far cards (POST)
@@ -80,9 +88,22 @@ export class Actor {
     this.mesh.castShadow = false; this.mesh.receiveShadow = true; this.mesh.visible = false;
     this.mesh.rotation.order = "YXZ"; this.mesh.renderOrder = 1; this.mesh.layers.set(NOINK);
     parent.add(this.mesh);
+    this.caster = new THREE.Mesh(geo, this.cmat);
+    this.caster.customDepthMaterial = this.dmat; this.caster.castShadow = true; this.caster.receiveShadow = false;
+    this.caster.rotation.order = "YXZ"; this.caster.layers.set(NOINK); this.caster.visible = false; this.caster.frustumCulled = false;
+    parent.add(this.caster);
     ROOTS.add(parent);
   }
-  bind() { const t = this.r?.tex; if (t) { this.mat.map = t; this.dmat.map = t; } }
+  bind() { const t = this.r?.tex; if (t) { this.mat.map = t; this.dmat.map = t; this.cmat.map = t; } }
+  /** pose the caster on the card: same place, size, hop and lean, turned to face the sun (null = no sun shadow) */
+  castFrom(sun: THREE.Vector3 | null) {
+    const c = this.caster;
+    c.visible = !!sun && this.mesh.visible;
+    if (!c.visible || !sun) return;
+    c.position.copy(this.mesh.position); c.scale.copy(this.mesh.scale);
+    c.rotation.set(0, Math.abs(sun.x) + Math.abs(sun.z) < 1e-4 ? this.mesh.rotation.y : Math.atan2(sun.x, sun.z), this.mesh.rotation.z);
+  }
+  hide() { this.mesh.visible = false; this.caster.visible = false; }
 }
 /** unlit effect card: hard cut-out (ink drawings), soft see-through (dust, mist) or a multiply ground blob */
 export class Fx {
@@ -216,9 +237,15 @@ const CONTACT: Record<"day" | "golden", [number, number, number]> = { day: [0.2,
 const TAIL: [number, number, number] = [0.42, 0.44, 0.62];
 const toSrgb = (v: number) => { const c = clamp01(v); return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055; };
 const hexOf = (c: [number, number, number], k: number) => "#" + c.map((v) => Math.round(255 * toSrgb(1 - (1 - v) * k)).toString(16).padStart(2, "0")).join("");
+/** The sun shadow itself is REAL now (cast.ts Actor.caster casts the drawing's silhouette into the shadow map), so the
+ *  painted tail is off; what stays is contact: a tight dark pool right under the feet (nobody floats, even inside the
+ *  shadow of a building) plus a wide faint occlusion pool. Both shrink (sc) and fade (k) while the card hops. */
+const PAINTED_TAIL = false;
 const blob = (out: Stage, x: number, y: number, z: number, sc = 1, k = 1) => {
   const hl = Math.hypot(SUN.x, SUN.z) || 1, ox = -SUN.x / hl, oz = -SUN.z / hl, rot = Math.atan2(-ox, -oz);
-  if (LNAME === "day") {
+  const ao = hexOf(CONTACT[LNAME], 0.3 * k);
+  out.fx.push({ key: `blob|contact|${ao}`, cw: 128, ch: 128, draw: (p) => fxContact(p, ao), x, y: y + 0.035, z, w: 1.0 * sc, h: 0.7 * sc, flat: true, rot });
+  if (PAINTED_TAIL && LNAME === "day") {
     const el = Math.asin(Math.min(0.99, Math.max(0.1, SUN.y)));
     const len = Math.min(2.4, Math.max(0.5, 1.6 / Math.tan(el))) * sc, h = len + 0.55 * sc, c = 0.3 * h; // feet at v = .2 of the card
     const tc = hexOf(TAIL, k);
@@ -227,7 +254,7 @@ const blob = (out: Stage, x: number, y: number, z: number, sc = 1, k = 1) => {
   }
   const cc = hexOf(CONTACT[LNAME], k);
   out.fx.push({ key: `blob|contact|${cc}`, cw: 128, ch: 128, draw: (p) => fxContact(p, cc), x: x + ox * 0.03 * sc, y: y + 0.04, z: z + oz * 0.03 * sc,
-    w: 0.52 * sc, h: 0.4 * sc, flat: true, rot });
+    w: 0.48 * sc, h: 0.34 * sc, flat: true, rot });
 };
 
 // ---------------- crowd by shot ----------------
