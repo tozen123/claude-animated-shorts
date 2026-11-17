@@ -503,7 +503,7 @@ const hatOn = (p: Pen, o: Outfit, hp: P2[], H: Blob, cx: number, hc: number, lig
 // ---------------- bodies ----------------
 export type Arms = [P2[], P2[]];
 /** held prop; for the hammer the number is the strike 0 (raised) .. 1 (struck) */
-export type Prop = null | "icecream" | "shako" | "bowl" | ["hammer", number] | ["mallet", number] | ["pick", number] | ["scissors", number];
+export type Prop = null | "icecream" | "shako" | "bowl" | "handle" | "flex" | ["hammer", number] | ["mallet", number] | ["pick", number] | ["scissors", number];
 
 const BUILD: Record<Build, { a: number; torso: number; legs: number; tw: number }> = {
   adult: { a: 118, torso: 1.1, legs: 1.4, tw: 0.8 },
@@ -591,6 +591,19 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
   const arms: Arm[] = [];
   if (mode === "sit") for (const side of [-1, 1]) arms.push({ pts: [sh(side), [tcx + side * (1.1 * T.a + 6 * u), sh(side)[1] + 0.4 * HH], [tcx + side * (1.2 * T.a + 10 * u), torsoBot + 0.04 * HH]], front: false });
   else if (mode === "fall") for (const side of [-1, 1]) arms.push({ pts: [sh(side), [tcx + side * (1.15 * T.a + 12 * u), sh(side)[1] - 0.25 * HH], [tcx + side * (1.3 * T.a + 24 * u), sh(side)[1] - 0.68 * HH]], front: false });
+  else if (prop === "handle") {
+    // both hands forward on a push bar at belly height (a cart, a pram, a barrow in front of the body)
+    for (const side of [-1, 1]) {
+      const S = sh(side);
+      arms.push({ pts: [S, [tcx + side * (1.08 * T.a + 4 * u), S[1] + 0.42 * HH], [tcx + side * 0.62 * T.a, chin + 0.78 * HH]], front: true });
+    }
+  } else if (prop === "flex") {
+    // a strongman pose: both arms up, fists by the ears
+    for (const side of [-1, 1]) {
+      const S = sh(side);
+      arms.push({ pts: [S, [tcx + side * (1.5 * T.a + 14 * u), S[1] + 0.05 * HH], [tcx + side * (1.15 * T.a + 6 * u), S[1] - 0.5 * HH]], front: false });
+    }
+  }
   else {
     arms.push({ pts: prop === "shako" ? hang(-1, 0) : hang(-1, -sw), front: false });
     if (rifle) {

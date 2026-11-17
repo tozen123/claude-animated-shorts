@@ -469,6 +469,14 @@ always show. The parts are also what gives the ink pass its many small interior 
 - **Props near a pivoting awning or shelf:** work out where a tilted board's front edge really is (rotateX(+a) drops the
   +z end by `len * sin(a)`) before holding a prop up under it; the Peoria melon vanished behind the awning.
 - **Walker heading = the real motion.** Pass `walker()` the direction the character actually moves (the sign of dz when z falls over time). A wrong sign makes the card pick a side or back view, so a crowd running at the camera shows everyone side-on or walking backwards. Check one still mid-run: people coming toward the lens face front.
+- **Round pictograms read as letters.** A white oval on a red disc reads as an "O" (cart short). Give every pictogram a
+  shape no letter has: an egg with a pointed top sitting on a wall, not an ellipse.
+- **Objects people use should be 3D props, not cards.** Carts, prams and barrows: build them once (`templates/props/carts.ts`
+  shows the pattern: merged parts per material, goods groups by fill level), keep a pool in world.ts, and pose them
+  from a `carts` list that `stage()` returns. A front card with the `handle` pose stands 0.62 m behind the cart.
+- **Auto-framing only sees cards.** A shot about a 3D prop (the chair that grows wheels) goes in `NOFRAME`, with the
+  camera aimed by hand, or frame.ts centres the character and crops the prop.
+- **AR.house porches put posts on the sidewalk** (1.6 m out from the front). Stand people and props in front of that line.
 - Kenney nature-kit materials are teal: recolour them by material name in build.ts.
 - Cameras end up inside houses: the sight-line culler in build.ts/world.ts removes anything blocking any camera ray.
 - Ink in the same merged effect pass as DOF gets overwritten. Ink must be its own pass before the blur.
@@ -480,6 +488,10 @@ always show. The parts are also what gives the ink pass its many small interior 
 - Scratch `.ts` files inside `out/` break `tsc`: name them `.txt`.
 - 2K renders run ~4 fps (≈10 min for 67 s). Stills at 0.5 take 3-8 s each after a ~40 s bundle.
 - Film grain at 2.5 % made the 2K file 910 MB instead of ~250 MB and will turn to mush on YouTube; the reference has none. Keep it off.
+- Square sails hang across the hull, so a broadside camera sees them edge-on as lines. Brace the yards ~30° and shoot ships from the bow quarter (`templates/props/tomatoes.ts` `galleon`).
+- A caterpillar built from spheres one diameter apart reads as a string of beads: stretch each segment ~1.25× along the body and keep any crawl hump small (`hornworm`).
+- Close inserts are narrow: at 1.3 m with fov 38 the 9:16 frame is only ±0.26 m wide, so pictograms beside a prop go at about ±0.13 m. Clear any plants or props between the lens and a small hero prop.
+- Cards point and wave toward screen right; set `mirror: true` on the place to reach left.
 
 ## Readability traps the verifier caught (check every new prop/shot for these)
 - **A swing drawn as one rope that disappears behind the kid reads as a HANGING.** Always two ropes to a wide plank

@@ -84,7 +84,7 @@ export const glassTex = (lit: boolean) => ctex(lit ? "glassLit" : "glassDay", 12
 });
 
 // ---------------- pictograms (signs carry shapes, never words) ----------------
-export type Picto = "pick" | "shovel" | "loaf" | "bed" | "anvil" | "bottle" | "coin" | "tooth" | "boot" | "cross" | "flask";
+export type Picto = "pick" | "shovel" | "loaf" | "bed" | "anvil" | "bottle" | "coin" | "tooth" | "boot" | "cross" | "flask" | "egg" | "cart";
 const shapeGeo = (draw: (s: THREE.Shape) => void, depth = 0.03) => { const s = new THREE.Shape(); draw(s); return new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false, curveSegments: 10 }); };
 /** a pictogram ~1 m across centred on the origin in the xy plane, 3 cm thick toward +z */
 export const pictoGeo = (k: Picto): THREE.BufferGeometry[] => {
@@ -101,6 +101,9 @@ export const pictoGeo = (k: Picto): THREE.BufferGeometry[] => {
     case "tooth": return [shapeGeo((s) => { s.moveTo(-0.3, 0.3); s.quadraticCurveTo(0, 0.45, 0.3, 0.3); s.lineTo(0.22, -0.4); s.lineTo(0.08, -0.4); s.lineTo(0, -0.1); s.lineTo(-0.08, -0.4); s.lineTo(-0.22, -0.4); s.closePath(); })];
     case "cross": return [rect(-0.13, -0.42, 0.13, 0.42), rect(-0.42, -0.13, 0.42, 0.13)];
     case "flask": return [rect(-0.07, 0.1, 0.07, 0.42), shapeGeo((s) => { s.moveTo(-0.07, 0.1); s.lineTo(0.07, 0.1); s.lineTo(0.36, -0.36); s.quadraticCurveTo(0.38, -0.42, 0.3, -0.42); s.lineTo(-0.3, -0.42); s.quadraticCurveTo(-0.38, -0.42, -0.36, -0.36); s.closePath(); })];
+    case "egg": return [shapeGeo((s) => { s.moveTo(0, 0.5); s.bezierCurveTo(0.17, 0.5, 0.29, 0.18, 0.29, -0.02); s.bezierCurveTo(0.29, -0.2, 0.16, -0.3, 0, -0.3); s.bezierCurveTo(-0.16, -0.3, -0.29, -0.2, -0.29, -0.02); s.bezierCurveTo(-0.29, 0.18, -0.17, 0.5, 0, 0.5); }),
+      rect(-0.46, -0.5, 0.46, -0.34), rect(-0.46, -0.33, -0.2, -0.31), rect(0.2, -0.33, 0.46, -0.31)];
+    case "cart": return [shapeGeo((s) => { s.moveTo(-0.42, 0.25); s.lineTo(0.38, 0.25); s.lineTo(0.28, -0.12); s.lineTo(-0.3, -0.12); s.closePath(); }), rect(-0.48, 0.22, -0.38, 0.42), ell(-0.22, -0.3, 0.09, 0.09), ell(0.18, -0.3, 0.09, 0.09)];
     case "boot": return [shapeGeo((s) => { s.moveTo(-0.2, 0.42); s.lineTo(0.1, 0.42); s.lineTo(0.1, -0.15); s.lineTo(0.42, -0.25); s.lineTo(0.42, -0.42); s.lineTo(-0.2, -0.42); s.closePath(); })];
   }
 };
